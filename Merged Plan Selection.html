@@ -11,11 +11,14 @@
     <!-- ===== EXISTING STYLES ===== -->
     <link rel="stylesheet" href="plan-selection.css">
 
+    <!-- ===== WEBFLOW PLAN SELECTION MODALS ===== -->
+    <link rel="stylesheet" href="plan-modals.css">
+
   </head>
   <body>
     <section class="sec" style="padding-top:64px;" id="choose">
       <div class="wrap">
-        <div class="plans-grid reveal">
+        <div class="plans-grid reveal in">
           <div class="plan">
             <div class="pname">FreedomPlus</div>
             <div class="pdesc">Individual protection, always on.</div>
@@ -28,7 +31,7 @@
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Digital Glovebox document storage</li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Driver's Portfolio Kit</li>
             </ul>
-            <a class="btn btn-dark" href="https://attorney-shield.net/choose-plans">Choose FreedomPlus</a>
+            <button class="btn btn-dark" onclick="wfmOpen('FreedomPlus')">Choose FreedomPlus</button>
           </div>
           <div class="plan feat">
             <div class="ptag">Best for families</div>
@@ -43,12 +46,383 @@
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>3 Driver Portfolio Kits</li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Centralized billing</li>
             </ul>
-            <a class="btn btn-gold" href="https://attorney-shield.net/choose-plans">Choose FreedomFAMILY</a>
+            <button class="btn btn-gold" onclick="wfmOpen('FreedomFAMILY')">Choose FreedomFAMILY</button>
           </div>
         </div>
         <p class="bill-note">Monthly, semiannual, and annual billing options available at checkout.</p>
       </div>
     </section>
 
+    <!-- Modal 1: Plan Selection -->
+    <div id="wfm-modal1" class="wfm-overlay" role="dialog" aria-modal="true" aria-label="Choose your plan">
+      <div class="wfm-container">
+        <div class="wfm-hdr">
+          <div class="wfm-hdr-left">
+            <h2 class="wfm-title">Choose Your Plan</h2>
+          </div>
+          <button class="wfm-close" onclick="wfmClose()" aria-label="Close">✕</button>
+        </div>
+        <div id="wfm-tabs" class="wfm-tabs"></div>
+        <div id="wfm-plan-list" class="wfm-plans">
+          <div class="wfm-loading"><div class="wfm-spinner"></div>Loading plans…</div>
+        </div>
+        <div class="wfm-promo-row">
+          <input id="wfm-promo-input" class="wfm-promo-input" type="text" placeholder="Promo code (optional)">
+          <button class="wfm-promo-apply" onclick="wfmApplyPromo()">Apply</button>
+        </div>
+        <div id="wfm-promo-msg" class="wfm-promo-msg"></div>
+      </div>
+      <!-- sticky footer bar appears once a plan is selected -->
+      <div id="wfm-footer-bar" class="wfm-footer-bar">
+        <div class="wfm-bar-info">
+          <div class="wfm-bar-name" id="wfm-bar-name">—</div>
+          <div class="wfm-bar-price" id="wfm-bar-price"></div>
+        </div>
+        <button class="wfm-continue-btn" onclick="wfmOpenStep2()">
+          Continue
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal 2: Account Details -->
+    <div id="wfm-modal2" class="wfm-overlay" role="dialog" aria-modal="true" aria-label="Create your account">
+      <div class="wfm-container">
+        <div class="wfm-hdr">
+          <div class="wfm-hdr-left">
+            <button class="wfm-back" onclick="wfmBackToPlans()">← Back</button>
+            <h2 class="wfm-title">Get Started</h2>
+          </div>
+          <button class="wfm-close" onclick="wfmClose()" aria-label="Close">✕</button>
+        </div>
+        <div class="wfm-two-col">
+          <!-- Left: plan summary -->
+          <div class="wfm-summary-card">
+            <h4>Your Selection</h4>
+            <div id="wfm-summary-content"></div>
+          </div>
+          <!-- Right: account form -->
+          <div class="wfm-form-card">
+            <h3>Create your account</h3>
+            <form id="wfm-account-form" autocomplete="on">
+              <div class="wfm-field">
+                <label for="wfm-first">First Name</label>
+                <input class="wfm-input" id="wfm-first" name="first_name" type="text" placeholder="John" required autocomplete="given-name">
+              </div>
+              <div class="wfm-field">
+                <label for="wfm-last">Last Name</label>
+                <input class="wfm-input" id="wfm-last" name="last_name" type="text" placeholder="Doe" required autocomplete="family-name">
+              </div>
+              <div class="wfm-field">
+                <label for="wfm-email">Email Address</label>
+                <input class="wfm-input" id="wfm-email" name="email" type="email" placeholder="john@example.com" required autocomplete="email">
+              </div>
+              <label class="wfm-tnc-row">
+                <input type="checkbox" id="wfm-tnc">
+                <span>I agree to the <a href="https://attorney-shield.com/policies/terms-of-service" target="_blank">Terms of Service</a> and <a href="https://attorney-shield.com/policies/privacy-policy" target="_blank">Privacy Policy</a>.</span>
+              </label>
+              <button type="submit" class="wfm-submit-btn" id="wfm-submit-btn" disabled>
+                <span id="wfm-submit-label">Proceed to Payment</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              </button>
+              <div id="wfm-error" class="wfm-error-msg"></div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function () {
+      // ── Configuration ──────────────────────────────────────────────
+      // Update WEB_API_BASE to the production URL of the WEB Laravel app.
+      var WEB_API_BASE = 'https://uat.attorney-shield.net';
+
+      // ── State ──────────────────────────────────────────────────────
+      var state = {
+        plans: null,          // { Monthly: [...], Semiannual: [...] }
+        activeDuration: null,
+        selectedPlan: null,
+        promoCode: '',
+        promoData: null,      // { netPayAmount, discountText, promocodeMessage }
+        netAmount: null,
+      };
+
+      // ── Helpers ────────────────────────────────────────────────────
+      function $id(id) { return document.getElementById(id); }
+
+      function checkSvg() {
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      }
+
+      // ── Open / close ───────────────────────────────────────────────
+      window.wfmOpen = function (planNameHint) {
+        document.body.style.overflow = 'hidden';
+        var m = $id('wfm-modal1');
+        m.classList.add('wfm-open');
+        if (!state.plans) {
+          loadPlans(planNameHint);
+        } else {
+          renderTabs();
+          renderCards(planNameHint);
+        }
+      };
+
+      window.wfmClose = function () {
+        $id('wfm-modal1').classList.remove('wfm-open');
+        $id('wfm-modal2').classList.remove('wfm-open');
+        document.body.style.overflow = '';
+      };
+
+      window.wfmBackToPlans = function () {
+        $id('wfm-modal2').classList.remove('wfm-open');
+        $id('wfm-modal1').classList.add('wfm-open');
+      };
+
+      // Close on backdrop click
+      ['wfm-modal1', 'wfm-modal2'].forEach(function (id) {
+        $id(id).addEventListener('click', function (e) {
+          if (e.target === this) wfmClose();
+        });
+      });
+
+      // Close on Escape
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') wfmClose();
+      });
+
+      // ── Load plans from API ────────────────────────────────────────
+      function loadPlans(hint) {
+        fetch(WEB_API_BASE + '/webflow/plans', { credentials: 'omit' })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.status) {
+              state.plans = data.data;
+              renderTabs();
+              renderCards(hint);
+            } else {
+              $id('wfm-plan-list').innerHTML =
+                '<div class="wfm-loading">Could not load plans. Please try again.</div>';
+            }
+          })
+          .catch(function () {
+            $id('wfm-plan-list').innerHTML =
+              '<div class="wfm-loading">Network error. Please try again.</div>';
+          });
+      }
+
+      // ── Render billing tabs ────────────────────────────────────────
+      function renderTabs() {
+        var durations = Object.keys(state.plans);
+        if (!state.activeDuration || !state.plans[state.activeDuration]) {
+          state.activeDuration = durations[0];
+        }
+        $id('wfm-tabs').innerHTML = durations.map(function (d) {
+          var active = d === state.activeDuration ? ' wfm-tab-active' : '';
+          return '<button class="wfm-tab' + active + '" onclick="wfmSelectDuration(\'' + d + '\')">' + d + '</button>';
+        }).join('');
+      }
+
+      window.wfmSelectDuration = function (duration) {
+        state.activeDuration = duration;
+        state.selectedPlan = null;
+        state.promoData = null;
+        state.netAmount = null;
+        $id('wfm-promo-input').value = '';
+        $id('wfm-promo-msg').innerHTML = '';
+        renderTabs();
+        renderCards();
+        hideFooterBar();
+      };
+
+      // ── Render plan cards ──────────────────────────────────────────
+      function renderCards(hint) {
+        var plans = (state.plans[state.activeDuration] || []);
+        if (!plans.length) {
+          $id('wfm-plan-list').innerHTML =
+            '<div class="wfm-loading">No plans available for this billing period.</div>';
+          return;
+        }
+
+        $id('wfm-plan-list').innerHTML = plans.map(function (plan, idx) {
+          var features = (plan.features || []).map(function (f) {
+            return '<li>' + checkSvg() + '<span>' + f + '</span></li>';
+          }).join('');
+          var isFamily = plan.included_subaccounts > 1 || plan.name.toLowerCase().includes('family');
+          var badge = isFamily ? '<div class="wfm-plan-badge">Best for families</div>' : '';
+          return '<div class="wfm-plan-card" id="wfm-card-' + plan.id + '" onclick="wfmSelectPlan(' + plan.id + ')" data-idx="' + idx + '">'
+            + badge
+            + '<div class="wfm-plan-name">' + plan.name + '</div>'
+            + '<div class="wfm-plan-desc">' + (plan.description || '') + '</div>'
+            + '<div class="wfm-plan-price"><span class="wfm-plan-amt">$' + plan.amount + '</span><span class="wfm-plan-per">/' + plan.plan_duration + '</span></div>'
+            + (features ? '<ul class="wfm-plan-features">' + features + '</ul>' : '')
+            + '<button class="wfm-select-btn">Select Plan</button>'
+            + '</div>';
+        }).join('');
+
+        // Auto-select by name hint
+        if (hint) {
+          var match = plans.find(function (p) {
+            return p.name.toLowerCase().replace(/\s/g, '').includes(hint.toLowerCase().replace(/\s/g, ''));
+          });
+          if (match) wfmSelectPlan(match.id);
+        }
+      }
+
+      window.wfmSelectPlan = function (planId) {
+        var plans = (state.plans[state.activeDuration] || []);
+        state.selectedPlan = plans.find(function (p) { return p.id === planId; });
+        if (!state.selectedPlan) return;
+
+        // Reset promo discount if plan changed
+        if (state.promoData && state.promoData._forPlanId !== planId) {
+          state.promoData = null;
+          state.promoCode = '';
+          $id('wfm-promo-input').value = '';
+          $id('wfm-promo-msg').innerHTML = '';
+        }
+        state.netAmount = state.promoData ? state.promoData.netPayAmount : state.selectedPlan.amount;
+
+        // Update card highlights
+        document.querySelectorAll('.wfm-plan-card').forEach(function (c) {
+          c.classList.remove('wfm-selected');
+        });
+        var card = $id('wfm-card-' + planId);
+        if (card) card.classList.add('wfm-selected');
+
+        showFooterBar();
+      };
+
+      // ── Footer bar ─────────────────────────────────────────────────
+      function showFooterBar() {
+        if (!state.selectedPlan) return;
+        var plan = state.selectedPlan;
+        var amount = state.netAmount !== null ? state.netAmount : plan.amount;
+        var promoHtml = state.promoData
+          ? '<span class="wfm-bar-promo">' + state.promoData.discountText + '</span>'
+          : '';
+        $id('wfm-bar-name').textContent = plan.name + ' — ' + plan.plan_duration;
+        $id('wfm-bar-price').innerHTML = '$' + amount + '/period ' + promoHtml;
+        $id('wfm-footer-bar').classList.add('wfm-bar-visible');
+      }
+
+      function hideFooterBar() {
+        $id('wfm-footer-bar').classList.remove('wfm-bar-visible');
+      }
+
+      // ── Promo code ─────────────────────────────────────────────────
+      window.wfmApplyPromo = function () {
+        var code = $id('wfm-promo-input').value.trim();
+        var msgEl = $id('wfm-promo-msg');
+        if (!code) { msgEl.innerHTML = '<span class="wfm-promo-err">Enter a promo code.</span>'; return; }
+        if (!state.selectedPlan) { msgEl.innerHTML = '<span class="wfm-promo-err">Select a plan first.</span>'; return; }
+
+        msgEl.innerHTML = '<div class="wfm-spinner" style="display:inline-block;width:14px;height:14px;"></div>';
+
+        fetch(WEB_API_BASE + '/webflow/check-promocode', {
+          method: 'POST',
+          credentials: 'omit',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selectedPlanId: state.selectedPlan.id, promocode: code }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.status) {
+              data.data._forPlanId = state.selectedPlan.id;
+              state.promoCode = code;
+              state.promoData = data.data;
+              state.netAmount = data.data.netPayAmount !== '' ? data.data.netPayAmount : state.selectedPlan.amount;
+              msgEl.innerHTML = '<span class="wfm-promo-ok">' + data.data.promocodeMessage + '</span>';
+              showFooterBar();
+            } else {
+              msgEl.innerHTML = '<span class="wfm-promo-err">' + data.message + '</span>';
+            }
+          })
+          .catch(function () {
+            msgEl.innerHTML = '<span class="wfm-promo-err">Could not validate promo code.</span>';
+          });
+      };
+
+      // ── Open Step 2 ────────────────────────────────────────────────
+      window.wfmOpenStep2 = function () {
+        if (!state.selectedPlan) return;
+        var plan = state.selectedPlan;
+        var amount = state.netAmount !== null ? state.netAmount : plan.amount;
+
+        // Build summary panel
+        var features = (plan.features || []).slice(0, 6).map(function (f) {
+          return '<li>' + checkSvg() + '<span>' + f + '</span></li>';
+        }).join('');
+        var promoRow = state.promoData
+          ? '<div class="wfm-summary-row"><span>Promo discount</span><strong style="color:var(--ok,#2e9e5b);">-' + state.promoData.discountText + '</strong></div>'
+          : '';
+
+        $id('wfm-summary-content').innerHTML =
+          '<div class="wfm-summary-row"><span>Plan</span><strong>' + plan.name + '</strong></div>'
+          + '<div class="wfm-summary-row"><span>Billing</span><strong>' + plan.plan_duration + '</strong></div>'
+          + promoRow
+          + '<div class="wfm-summary-row"><span>Total due today</span></div>'
+          + '<div class="wfm-summary-total">$' + amount + '</div>'
+          + (features ? '<ul class="wfm-summary-features">' + features + '</ul>' : '');
+
+        $id('wfm-modal1').classList.remove('wfm-open');
+        $id('wfm-modal2').classList.add('wfm-open');
+        $id('wfm-modal2').scrollTop = 0;
+      };
+
+      // ── T&C checkbox ───────────────────────────────────────────────
+      $id('wfm-tnc').addEventListener('change', function () {
+        $id('wfm-submit-btn').disabled = !this.checked;
+      });
+
+      // ── Checkout form submit ───────────────────────────────────────
+      $id('wfm-account-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var btn      = $id('wfm-submit-btn');
+        var labelEl  = $id('wfm-submit-label');
+        var errEl    = $id('wfm-error');
+
+        btn.disabled = true;
+        labelEl.textContent = 'Processing…';
+        errEl.classList.remove('wfm-visible');
+        errEl.textContent = '';
+
+        var plan   = state.selectedPlan;
+        var amount = state.netAmount !== null ? state.netAmount : plan.amount;
+
+        fetch(WEB_API_BASE + '/webflow/checkout', {
+          method: 'POST',
+          credentials: 'omit',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            first_name:          $id('wfm-first').value.trim(),
+            last_name:           $id('wfm-last').value.trim(),
+            email:               $id('wfm-email').value.trim().toLowerCase(),
+            planId:              plan.id,
+            amount:              amount,
+            promocode:           state.promoCode || 'No',
+            additional_accounts: 0,
+          }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.status && data.url) {
+              window.location.href = data.url;
+            } else {
+              errEl.textContent = data.message || 'An error occurred. Please try again.';
+              errEl.classList.add('wfm-visible');
+              btn.disabled = false;
+              labelEl.textContent = 'Proceed to Payment';
+            }
+          })
+          .catch(function () {
+            errEl.textContent = 'Network error. Please check your connection and try again.';
+            errEl.classList.add('wfm-visible');
+            btn.disabled = false;
+            labelEl.textContent = 'Proceed to Payment';
+          });
+      });
+    })();
+    </script>
   </body>
 </html>

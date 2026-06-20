@@ -31,7 +31,7 @@
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Digital Glovebox document storage</li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Driver's Portfolio Kit</li>
             </ul>
-            <button class="btn btn-dark" onclick="wfmOpen('FreedomPlus')">Choose FreedomPlus</button>
+            <button class="btn btn-dark" onclick="wfmOpen('Individual')">Choose FreedomPlus</button>
           </div>
           <div class="plan feat">
             <div class="ptag">Best for families</div>
@@ -46,7 +46,7 @@
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>3 Driver Portfolio Kits</li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Centralized billing</li>
             </ul>
-            <button class="btn btn-gold" onclick="wfmOpen('FreedomFAMILY')">Choose FreedomFAMILY</button>
+            <button class="btn btn-gold" onclick="wfmOpen('Family')">Choose FreedomFAMILY</button>
           </div>
         </div>
         <p class="bill-note">Monthly, semiannual, and annual billing options available at checkout.</p>
@@ -142,6 +142,7 @@
       var state = {
         plans: null,          // { Monthly: [...], Semiannual: [...] }
         activeDuration: null,
+        planFilter: null,     // name hint from the button that opened the modal
         selectedPlan: null,
         promoCode: '',
         promoData: null,      // { netPayAmount, discountText, promocodeMessage }
@@ -157,14 +158,25 @@
 
       // ── Open / close ───────────────────────────────────────────────
       window.wfmOpen = function (planNameHint) {
+        // Reset per-session state so a fresh filter is applied each time
+        state.planFilter = planNameHint || null;
+        state.activeDuration = null;
+        state.selectedPlan = null;
+        state.promoCode = '';
+        state.promoData = null;
+        state.netAmount = null;
+
         document.body.style.overflow = 'hidden';
-        var m = $id('wfm-modal1');
-        m.classList.add('wfm-open');
+        $id('wfm-promo-input').value = '';
+        $id('wfm-promo-msg').innerHTML = '';
+        hideFooterBar();
+
+        $id('wfm-modal1').classList.add('wfm-open');
         if (!state.plans) {
-          loadPlans(planNameHint);
+          loadPlans();
         } else {
           renderTabs();
-          renderCards(planNameHint);
+          renderCards();
         }
       };
 
@@ -192,14 +204,14 @@
       });
 
       // ── Load plans from API ────────────────────────────────────────
-      function loadPlans(hint) {
+      function loadPlans() {
         fetch(WEB_API_BASE + '/webflow/plans', { credentials: 'omit' })
           .then(function (r) { return r.json(); })
           .then(function (data) {
             if (data.status) {
               state.plans = data.data;
               renderTabs();
-              renderCards(hint);
+              renderCards();
             } else {
               $id('wfm-plan-list').innerHTML =
                 '<div class="wfm-loading">Could not load plans. Please try again.</div>';
@@ -236,8 +248,17 @@
       };
 
       // ── Render plan cards ──────────────────────────────────────────
-      function renderCards(hint) {
-        var plans = (state.plans[state.activeDuration] || []);
+      function renderCards() {
+        var allPlans = (state.plans[state.activeDuration] || []);
+
+        // Filter to only the plan type the user chose from the landing cards
+        var plans = state.planFilter
+          ? allPlans.filter(function (p) {
+              return p.name.toLowerCase().replace(/\s/g, '')
+                .includes(state.planFilter.toLowerCase().replace(/\s/g, ''));
+            })
+          : allPlans;
+
         if (!plans.length) {
           $id('wfm-plan-list').innerHTML =
             '<div class="wfm-loading">No plans available for this billing period.</div>';
@@ -260,12 +281,9 @@
             + '</div>';
         }).join('');
 
-        // Auto-select by name hint
-        if (hint) {
-          var match = plans.find(function (p) {
-            return p.name.toLowerCase().replace(/\s/g, '').includes(hint.toLowerCase().replace(/\s/g, ''));
-          });
-          if (match) wfmSelectPlan(match.id);
+        // Auto-select the single visible card
+        if (plans.length === 1) {
+          wfmSelectPlan(plans[0].id);
         }
       }
 

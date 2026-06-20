@@ -19,22 +19,22 @@
       .wfm-container {
         max-width: 960px;
         margin: 0 auto;
-        padding: 40px 28px 80px;
+        padding: 40px 28px 140px; /* 140px leaves room above the fixed footer bar */
         width: 100%;
       }
 
       /* ---- modal header bar ---- */
       .wfm-hdr {
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr auto; /* title fills centre, close pins right */
         align-items: center;
-        justify-content: space-between;
-        margin-bottom: 36px;
-        flex-wrap: wrap;
+        margin-bottom: 28px;
         gap: 14px;
       }
       .wfm-hdr-left {
         display: flex;
         align-items: center;
+        justify-content: center; /* centres title (and back button on step 2) */
         gap: 16px;
       }
       .wfm-back {
@@ -87,6 +87,7 @@
         gap: 8px;
         margin-bottom: 32px;
         flex-wrap: wrap;
+        justify-content: center;
       }
       .wfm-tab {
         padding: 11px 22px;
@@ -112,16 +113,19 @@
 
       /* ---- plan cards grid ---- */
       .wfm-plans {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
         gap: 20px;
         margin-bottom: 30px;
       }
       .wfm-plan-card {
+        flex: 0 1 600px;
+        min-width: 280px;
         background: rgba(255, 255, 255, 0.04);
         border: 1.5px solid rgba(255, 255, 255, 0.1);
         border-radius: 20px;
-        padding: 28px 26px;
+        padding: 36px 40px;
         cursor: pointer;
         transition:
           border-color 0.2s,
@@ -129,6 +133,12 @@
           background 0.2s;
         position: relative;
         color: #fff;
+      }
+      @media (max-width: 680px) {
+        .wfm-plan-card {
+          flex: 1 1 100%;
+          padding: 26px 20px;
+        }
       }
       .wfm-plan-card:hover {
         border-color: rgba(255, 255, 255, 0.28);

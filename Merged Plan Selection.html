@@ -55,24 +55,26 @@
 
     <!-- Modal 1: Plan Selection -->
     <div id="wfm-modal1" class="wfm-overlay" role="dialog" aria-modal="true" aria-label="Choose your plan">
-      <div class="wfm-container">
-        <div class="wfm-hdr">
-          <div class="wfm-hdr-left">
-            <h2 class="wfm-title">Choose Your Plan</h2>
+      <div class="wfm-scroll-body">
+        <div class="wfm-container">
+          <div class="wfm-hdr">
+            <div class="wfm-hdr-left">
+              <h2 class="wfm-title">Choose Your Plan</h2>
+            </div>
+            <button class="wfm-close" onclick="wfmClose()" aria-label="Close">✕</button>
           </div>
-          <button class="wfm-close" onclick="wfmClose()" aria-label="Close">✕</button>
+          <div id="wfm-tabs" class="wfm-tabs"></div>
+          <div id="wfm-plan-list" class="wfm-plans">
+            <div class="wfm-loading"><div class="wfm-spinner"></div>Loading plans…</div>
+          </div>
+          <div class="wfm-promo-row">
+            <input id="wfm-promo-input" class="wfm-promo-input" type="text" placeholder="Promo code (optional)">
+            <button class="wfm-promo-apply" onclick="wfmApplyPromo()">Apply</button>
+          </div>
+          <div id="wfm-promo-msg" class="wfm-promo-msg"></div>
         </div>
-        <div id="wfm-tabs" class="wfm-tabs"></div>
-        <div id="wfm-plan-list" class="wfm-plans">
-          <div class="wfm-loading"><div class="wfm-spinner"></div>Loading plans…</div>
-        </div>
-        <div class="wfm-promo-row">
-          <input id="wfm-promo-input" class="wfm-promo-input" type="text" placeholder="Promo code (optional)">
-          <button class="wfm-promo-apply" onclick="wfmApplyPromo()">Apply</button>
-        </div>
-        <div id="wfm-promo-msg" class="wfm-promo-msg"></div>
       </div>
-      <!-- sticky footer bar appears once a plan is selected -->
+      <!-- footer bar: flex sibling so it never overlaps scrollable content -->
       <div id="wfm-footer-bar" class="wfm-footer-bar">
         <div class="wfm-bar-info">
           <div class="wfm-bar-name" id="wfm-bar-name">—</div>
@@ -87,6 +89,7 @@
 
     <!-- Modal 2: Account Details -->
     <div id="wfm-modal2" class="wfm-overlay" role="dialog" aria-modal="true" aria-label="Create your account">
+      <div class="wfm-scroll-body">
       <div class="wfm-container">
         <div class="wfm-hdr">
           <div class="wfm-hdr-left">
@@ -130,6 +133,7 @@
           </div>
         </div>
       </div>
+      </div><!-- /.wfm-scroll-body -->
     </div>
 
     <script>
@@ -271,13 +275,13 @@
           }).join('');
           var isFamily = plan.included_subaccounts > 1 || plan.name.toLowerCase().includes('family');
           var badge = isFamily ? '<div class="wfm-plan-badge">Best for families</div>' : '';
-          return '<div class="wfm-plan-card" id="wfm-card-' + plan.id + '" onclick="wfmSelectPlan(' + plan.id + ')" data-idx="' + idx + '">'
+          return '<div class="wfm-plan-card" id="wfm-card-' + plan.id + '" data-idx="' + idx + '">'
             + badge
             + '<div class="wfm-plan-name">' + plan.name + '</div>'
             + '<div class="wfm-plan-desc">' + (plan.description || '') + '</div>'
             + '<div class="wfm-plan-price"><span class="wfm-plan-amt">$' + plan.amount + '</span><span class="wfm-plan-per">/' + plan.plan_duration + '</span></div>'
             + (features ? '<ul class="wfm-plan-features">' + features + '</ul>' : '')
-            + '<button class="wfm-select-btn">Select Plan</button>'
+            + '<button class="wfm-select-btn" onclick="wfmConfirmPlan(' + plan.id + ')">Select Plan</button>'
             + '</div>';
         }).join('');
 
@@ -307,7 +311,12 @@
         });
         var card = $id('wfm-card-' + planId);
         if (card) card.classList.add('wfm-selected');
+        // Footer bar stays hidden until the user clicks "Select Plan"
+      };
 
+      // Called only by the "Select Plan" button — shows the footer bar
+      window.wfmConfirmPlan = function (planId) {
+        wfmSelectPlan(planId);
         showFooterBar();
       };
 

@@ -7,7 +7,7 @@
         backdrop-filter: blur(14px);
         display: flex;
         flex-direction: column;
-        overflow-y: auto;
+        overflow: hidden; /* scroll handled by .wfm-scroll-body child */
         opacity: 0;
         pointer-events: none;
         transition: opacity 0.28s ease;
@@ -16,10 +16,15 @@
         opacity: 1;
         pointer-events: all;
       }
+      /* scrollable content area — grows to fill space above the footer bar */
+      .wfm-scroll-body {
+        flex: 1;
+        overflow-y: auto;
+      }
       .wfm-container {
         max-width: 960px;
         margin: 0 auto;
-        padding: 40px 28px 140px; /* 140px leaves room above the fixed footer bar */
+        padding: 40px 28px 40px;
         width: 100%;
       }
 
@@ -322,25 +327,24 @@
 
       /* ---- sticky footer bar (plan 1 only) ---- */
       .wfm-footer-bar {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
+        flex-shrink: 0;
         background: rgba(13, 27, 46, 0.97);
         backdrop-filter: blur(12px);
         border-top: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 16px 28px;
+        padding: 0 28px; /* vertical padding via max-height so slide-in is smooth */
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        z-index: 100001;
-        transform: translateY(100%);
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         flex-wrap: wrap;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                    padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .wfm-footer-bar.wfm-bar-visible {
-        transform: translateY(0);
+        max-height: 120px;
+        padding: 16px 28px;
       }
       .wfm-bar-info {
         display: flex;

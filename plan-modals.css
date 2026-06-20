@@ -399,7 +399,7 @@
         display: grid;
         grid-template-columns: 1fr 1.2fr;
         gap: 40px;
-        align-items: start;
+        align-items: stretch; /* both cards same height */
       }
       @media (max-width: 680px) {
         .wfm-two-col {
@@ -412,6 +412,16 @@
         border-radius: 20px;
         padding: 30px 26px;
         color: #fff;
+        display: flex;
+        flex-direction: column;
+      }
+      /* step-2 header: back | title (centred) | close */
+      .wfm-hdr--3col {
+        grid-template-columns: auto 1fr auto;
+        margin-bottom: 48px;
+      }
+      .wfm-hdr--3col .wfm-title {
+        text-align: center;
       }
       .wfm-summary-card h4 {
         font-size: 12px;
@@ -474,6 +484,8 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 20px;
         padding: 34px 30px;
+        display: flex;
+        flex-direction: column;
       }
       .wfm-form-card h3 {
         font-size: 22px;

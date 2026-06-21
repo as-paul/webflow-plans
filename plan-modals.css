@@ -752,3 +752,39 @@
         content: '• ';
       }
 
+      /* ---- Trial links (inside each main-page plan card) ---- */
+      .page-card-trial {
+        display: block;
+        width: 100%;
+        text-align: center;
+        margin-top: 10px;
+        font-size: 13px;
+      }
+      .wfm-trial-btn {
+        background: none;
+        border: none;
+        color: var(--gold-hi, #e8a020);
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+        padding: 0;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      .wfm-trial-btn:hover {
+        color: #fff;
+      }
+
+      /* ---- Trial summary (Modal 2) ---- */
+      .wfm-summary-total--trial {
+        color: var(--ok, #2e9e5b);
+      }
+      .wfm-trial-notice {
+        margin-top: 18px;
+        font-size: 12.5px;
+        color: rgba(255, 255, 255, 0.42);
+        line-height: 1.55;
+        font-style: italic;
+      }
+

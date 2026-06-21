@@ -32,6 +32,7 @@
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Driver's Portfolio Kit</li>
             </ul>
             <button class="btn btn-dark" onclick="wfmOpen('Individual')">Choose FreedomPlus</button>
+            <button class="wfm-trial-btn page-card-trial" onclick="wfmOpenTrial('Individual')">or start a free trial →</button>
           </div>
           <div class="plan feat">
             <div class="ptag">Best for families</div>
@@ -47,6 +48,7 @@
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Centralized billing</li>
             </ul>
             <button class="btn btn-gold" onclick="wfmOpen('Family')">Choose FreedomFAMILY</button>
+            <button class="wfm-trial-btn page-card-trial" onclick="wfmOpenTrial('Family')">or start a free trial →</button>
           </div>
         </div>
         <p class="bill-note">Monthly, semiannual, and annual billing options available at checkout.</p>
@@ -172,6 +174,8 @@
         promoData: null,      // { netPayAmount, discountText, promocodeMessage }
         netAmount: null,
         additionalAccounts: 0,
+        trialMode: false,
+        cameFromPicker: false,
       };
 
       // ── Helpers ────────────────────────────────────────────────────
@@ -191,6 +195,8 @@
         state.promoData = null;
         state.netAmount = null;
         state.additionalAccounts = 0;
+        state.trialMode = false;
+        state.cameFromPicker = false;
 
         document.body.style.overflow = 'hidden';
         $id('wfm-promo-input').value = '';
@@ -211,6 +217,8 @@
       var originalFormCardHTML = $id('wfm-modal2').querySelector('.wfm-form-card').innerHTML;
 
       function resetStep2() {
+        state.trialMode = false;
+        showModal2BackBtn();
         // Restore form HTML if the success screen replaced it
         var formCard = $id('wfm-modal2').querySelector('.wfm-form-card');
         if (!$id('wfm-account-form')) {
@@ -221,7 +229,8 @@
         $id('wfm-first').value  = '';
         $id('wfm-last').value   = '';
         $id('wfm-email').value  = '';
-        // Reset checkbox and submit button
+        // Reset modal 2 title and submit button
+        $id('wfm-modal2').querySelector('.wfm-title').textContent = 'Get Started';
         $id('wfm-tnc').checked        = false;
         $id('wfm-submit-btn').disabled = true;
         $id('wfm-submit-label').textContent = 'Proceed to Payment';
@@ -243,9 +252,18 @@
       };
 
       window.wfmBackToPlans = function () {
+        var fromPicker = state.cameFromPicker;
+        state.cameFromPicker = false;
         resetStep2();
         $id('wfm-modal2').classList.remove('wfm-open');
         $id('wfm-modal1').classList.add('wfm-open');
+        if (fromPicker) {
+          // Restore netAmount to base (before picker added the extra cost)
+          var plan = state.selectedPlan;
+          var fee  = parseFloat(plan.additional_subaccount_fee) || 0;
+          state.netAmount = parseFloat(state.netAmount) - state.additionalAccounts * fee;
+          wfmShowAccountsPicker(true); // reopens picker with count preserved
+        }
       };
 
       // Close on backdrop click
@@ -316,6 +334,11 @@
             })
           : allPlans;
 
+        // In trial mode only show plans that actually offer a trial period
+        if (state.trialMode) {
+          plans = plans.filter(function (p) { return parseInt(p.trial_period_days, 10) > 0; });
+        }
+
         if (!plans.length) {
           $id('wfm-plan-list').innerHTML =
             '<div class="wfm-loading">No plans available for this billing period.</div>';
@@ -377,12 +400,18 @@
       function showFooterBar() {
         if (!state.selectedPlan) return;
         var plan = state.selectedPlan;
-        var amount = state.netAmount !== null ? state.netAmount : plan.amount;
-        var promoHtml = state.promoData
-          ? '<span class="wfm-bar-promo">' + state.promoData.discountText + '</span>'
-          : '';
-        $id('wfm-bar-name').textContent = plan.name + ' — ' + plan.plan_duration;
-        $id('wfm-bar-price').innerHTML = '$' + amount + '/period ' + promoHtml;
+        if (state.trialMode) {
+          var days = parseInt(plan.trial_period_days, 10) || 0;
+          $id('wfm-bar-name').textContent = plan.name + ' — ' + days + '-Day Trial';
+          $id('wfm-bar-price').textContent = '$0 due today';
+        } else {
+          var amount = state.netAmount !== null ? state.netAmount : plan.amount;
+          var promoHtml = state.promoData
+            ? '<span class="wfm-bar-promo">' + state.promoData.discountText + '</span>'
+            : '';
+          $id('wfm-bar-name').textContent = plan.name + ' — ' + plan.plan_duration;
+          $id('wfm-bar-price').innerHTML = '$' + amount + '/period ' + promoHtml;
+        }
         $id('wfm-footer-bar').classList.add('wfm-bar-visible');
       }
 
@@ -485,13 +514,13 @@
         setPickerHeader(false);
       };
 
-      function wfmShowAccountsPicker() {
+      function wfmShowAccountsPicker(preserveCount) {
         var plan = state.selectedPlan;
-        state.additionalAccounts = 0;
+        if (!preserveCount) state.additionalAccounts = 0;
         var fee = parseFloat(plan.additional_subaccount_fee) || 0;
         var max = parseInt(plan.additional_sub_accounts_allowed, 10) || 0;
         $id('wfm-acct-sub').textContent = 'Add more accounts ($' + fee.toFixed(2) + ' per account)';
-        $id('wfm-acct-count').textContent = '0 / ' + max;
+        $id('wfm-acct-count').textContent = state.additionalAccounts + ' / ' + max;
         updateAcctTotal();
         wfmPlanSections().forEach(function (el) { if (el) el.style.display = 'none'; });
         $id('wfm-acct-picker').style.display = 'block';
@@ -522,6 +551,7 @@
         var fee   = parseFloat(plan.additional_subaccount_fee) || 0;
         var base  = state.netAmount !== null ? state.netAmount : plan.amount;
         state.netAmount = parseFloat(base) + state.additionalAccounts * fee;
+        state.cameFromPicker = true;
         wfmHideAccountsPicker();
         wfmOpenModal2();
       };
@@ -536,6 +566,12 @@
           return;
         }
 
+        // Trial flow skips the additional accounts picker
+        if (state.trialMode) {
+          wfmOpenModal2();
+          return;
+        }
+
         var plan = state.selectedPlan;
         if (parseInt(plan.additional_sub_accounts_allowed, 10) > 0) {
           wfmShowAccountsPicker();
@@ -544,51 +580,69 @@
         wfmOpenModal2();
       };
 
+      // ── Trial signup ───────────────────────────────────────────────
+      // Called from a plan card on the main page — opens Modal 1 filtered to
+      // that plan type and in trial mode so Continue goes to the trial form.
+      window.wfmOpenTrial = function (planNameHint) {
+        wfmOpen(planNameHint || null); // opens modal 1, resets all state
+        state.trialMode = true; // set after wfmOpen so it survives the reset
+      };
+
       function wfmOpenModal2() {
-        var plan    = state.selectedPlan;
-        var baseAmt = parseFloat(plan.amount);
-        var fee     = parseFloat(plan.additional_subaccount_fee) || 0;
-        var acctCost = state.additionalAccounts * fee;
-        var total   = state.netAmount !== null ? parseFloat(state.netAmount) : baseAmt;
-
-        // Discount row
-        var discountAmt = 0;
-        var discountLabel = 'Discount';
-        if (state.promoData) {
-          var promoNet = parseFloat(state.promoData.netPayAmount);
-          discountAmt  = Math.max(0, baseAmt - promoNet);
-          if (state.promoData.discountText && state.promoData.discountText.toLowerCase().includes('month')) {
-            discountLabel = 'Promo (' + state.promoData.discountText + ')';
-          }
-        }
-        var discountValue = discountAmt > 0
-          ? '<strong style="color:var(--ok,#2e9e5b);">-$' + discountAmt.toFixed(2) + '</strong>'
-          : '<strong>$0.00</strong>';
-
-        // Additional accounts row
-        var acctRow = state.additionalAccounts > 0
-          ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong>$' + acctCost.toFixed(2) + '</strong></div>'
-          : '';
-
-        // Features list
+        var plan     = state.selectedPlan;
         var features = (plan.features || []).slice(0, 6).map(function (f) {
           return '<li>' + checkSvg() + '<span>' + f + '</span></li>';
         }).join('');
 
-        $id('wfm-summary-content').innerHTML =
-            '<div class="wfm-summary-row wfm-summary-row--plan"><span>' + plan.name + '</span><span class="wfm-summary-period">' + plan.plan_duration + '</span></div>'
-          + '<div class="wfm-summary-row"><span>Primary Account</span><strong>$' + baseAmt.toFixed(2) + '</strong></div>'
-          + '<div class="wfm-summary-row"><span>' + discountLabel + '</span>' + discountValue + '</div>'
-          + acctRow
-          + '<div class="wfm-summary-row wfm-summary-row--total"><span>Total Amount</span><strong>$' + total.toFixed(2) + '</strong></div>'
-          + '<div class="wfm-summary-total">$' + total.toFixed(2) + '</div>'
-          + (features ? '<ul class="wfm-summary-features">' + features + '</ul>' : '');
+        if (state.trialMode) {
+          var trialDays = parseInt(plan.trial_period_days, 10) || 0;
+          $id('wfm-summary-content').innerHTML =
+              '<div class="wfm-summary-row wfm-summary-row--plan"><span>' + plan.name + '</span><span class="wfm-summary-period">Trial</span></div>'
+            + '<div class="wfm-summary-row"><span>Trial Period</span><strong>' + trialDays + ' days</strong></div>'
+            + '<div class="wfm-summary-row"><span>Due Today</span><strong style="color:var(--ok,#2e9e5b);">$0.00</strong></div>'
+            + '<div class="wfm-summary-row wfm-summary-row--total"><span>Total Amount</span><strong style="color:var(--ok,#2e9e5b);">Free</strong></div>'
+            + '<div class="wfm-summary-total wfm-summary-total--trial">$0 <span class="wfm-summary-period">today</span></div>'
+            + '<p class="wfm-trial-notice">A valid card is required. You will not be charged until the trial ends. Cancel anytime before then.</p>'
+            + (features ? '<ul class="wfm-summary-features">' + features + '</ul>' : '');
+          $id('wfm-modal2').querySelector('.wfm-title').textContent = 'Start Your Trial';
+          $id('wfm-submit-label').textContent = 'Start ' + trialDays + '-Day Trial';
+        } else {
+          var baseAmt  = parseFloat(plan.amount);
+          var fee      = parseFloat(plan.additional_subaccount_fee) || 0;
+          var acctCost = state.additionalAccounts * fee;
+          var total    = state.netAmount !== null ? parseFloat(state.netAmount) : baseAmt;
+
+          var discountAmt   = 0;
+          var discountLabel = 'Discount';
+          if (state.promoData) {
+            var promoNet = parseFloat(state.promoData.netPayAmount);
+            discountAmt  = Math.max(0, baseAmt - promoNet);
+            if (state.promoData.discountText && state.promoData.discountText.toLowerCase().includes('month')) {
+              discountLabel = 'Promo (' + state.promoData.discountText + ')';
+            }
+          }
+          var discountValue = discountAmt > 0
+            ? '<strong style="color:var(--ok,#2e9e5b);">-$' + discountAmt.toFixed(2) + '</strong>'
+            : '<strong>$0.00</strong>';
+
+          var acctRow = state.additionalAccounts > 0
+            ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong>$' + acctCost.toFixed(2) + '</strong></div>'
+            : '';
+
+          $id('wfm-summary-content').innerHTML =
+              '<div class="wfm-summary-row wfm-summary-row--plan"><span>' + plan.name + '</span><span class="wfm-summary-period">' + plan.plan_duration + '</span></div>'
+            + '<div class="wfm-summary-row"><span>Primary Account</span><strong>$' + baseAmt.toFixed(2) + '</strong></div>'
+            + '<div class="wfm-summary-row"><span>' + discountLabel + '</span>' + discountValue + '</div>'
+            + acctRow
+            + '<div class="wfm-summary-row wfm-summary-row--total"><span>Total Amount</span><strong>$' + total.toFixed(2) + '</strong></div>'
+            + '<div class="wfm-summary-total">$' + total.toFixed(2) + '</div>'
+            + (features ? '<ul class="wfm-summary-features">' + features + '</ul>' : '');
+        }
 
         $id('wfm-modal1').classList.remove('wfm-open');
         $id('wfm-modal2').classList.add('wfm-open');
         $id('wfm-modal2').scrollTop = 0;
 
-        // Mount card element once the modal is visible
         if (cardElement) {
           var container = $id('wfm-card-element');
           if (container && !container.hasChildNodes()) {
@@ -610,15 +664,42 @@
         errEl.textContent = msg;
         errEl.classList.add('wfm-visible');
         btn.disabled = false;
-        labelEl.textContent = 'Proceed to Payment';
+        var plan = state.selectedPlan;
+        if (state.trialMode && plan && plan.trial_period_days) {
+          labelEl.textContent = 'Start ' + plan.trial_period_days + '-Day Trial';
+        } else {
+          labelEl.textContent = 'Proceed to Payment';
+        }
+      }
+
+      function hideModal2BackBtn() {
+        var btn = $id('wfm-modal2').querySelector('.wfm-back');
+        if (btn) btn.style.visibility = 'hidden';
+      }
+
+      function showModal2BackBtn() {
+        var btn = $id('wfm-modal2').querySelector('.wfm-back');
+        if (btn) btn.style.visibility = '';
       }
 
       function showPaymentSuccess() {
+        hideModal2BackBtn();
         $id('wfm-modal2').querySelector('.wfm-form-card').innerHTML =
           '<div class="wfm-success">'
           + '<div class="wfm-success-icon">✓</div>'
           + '<h2 class="wfm-success-title">Payment Successful!</h2>'
           + '<p class="wfm-success-msg">Your account has been activated. Please go to the Attorney Shield app, navigate to the login screen, then enter your email to complete your enrollment.</p>'
+          + '<button class="wfm-submit-btn wfm-submit-btn--full" onclick="wfmClose()">Done</button>'
+          + '</div>';
+      }
+
+      function showTrialSuccess(trialDays) {
+        hideModal2BackBtn();
+        $id('wfm-modal2').querySelector('.wfm-form-card').innerHTML =
+          '<div class="wfm-success">'
+          + '<div class="wfm-success-icon">✓</div>'
+          + '<h2 class="wfm-success-title">Trial Started!</h2>'
+          + '<p class="wfm-success-msg">Your ' + trialDays + '-day free trial is now active. Please go to the Attorney Shield app, navigate to the login screen, then enter your email to complete your enrollment.</p>'
           + '<button class="wfm-submit-btn wfm-submit-btn--full" onclick="wfmClose()">Done</button>'
           + '</div>';
       }
@@ -630,7 +711,10 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         })
-          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            if (!r.ok) return Promise.reject(new Error('http_' + r.status));
+            return r.json();
+          })
           .then(function (data) {
             if (data.requiresAction) {
               // 3-D Secure — hand off to Stripe's popup
@@ -656,8 +740,15 @@
               showFormError(errEl, btn, labelEl, data.message || 'An error occurred. Please try again.');
             }
           })
-          .catch(function () {
-            showFormError(errEl, btn, labelEl, 'Network error. Please check your connection and try again.');
+          .catch(function (err) {
+            var msg = 'Network error. Please check your connection and try again.';
+            if (err && err.message && err.message.indexOf('http_') === 0) {
+              var code = err.message.replace('http_', '');
+              msg = code === '404'
+                ? 'Payment endpoint not found (404). Please ensure the backend has been deployed.'
+                : 'Server error (' + code + '). Please try again or contact support.';
+            }
+            showFormError(errEl, btn, labelEl, msg);
           });
       }
 
@@ -677,7 +768,6 @@
         errEl.textContent = '';
 
         var plan      = state.selectedPlan;
-        var amount    = state.netAmount !== null ? state.netAmount : plan.amount;
         var firstName = $id('wfm-first').value.trim();
         var lastName  = $id('wfm-last').value.trim();
         var email     = $id('wfm-email').value.trim().toLowerCase();
@@ -691,16 +781,57 @@
             showFormError(errEl, btn, labelEl, result.error.message);
             return;
           }
-          postSubscribe({
-            first_name:          firstName,
-            last_name:           lastName,
-            email:               email,
-            planId:              plan.id,
-            amount:              amount,
-            promocode:           state.promoCode || 'No',
-            additional_accounts: state.additionalAccounts || 0,
-            payment_method_id:   result.paymentMethod.id,
-          }, btn, labelEl, errEl);
+
+          if (state.trialMode) {
+            fetch(WEB_API_BASE + '/webflow/start-trial', {
+              method: 'POST',
+              credentials: 'omit',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                first_name:          firstName,
+                last_name:           lastName,
+                email:               email,
+                planId:              plan.id,
+                additional_accounts: 0,
+                payment_method_id:   result.paymentMethod.id,
+              }),
+            })
+            .then(function (r) {
+              if (!r.ok) {
+                return Promise.reject(new Error('http_' + r.status));
+              }
+              return r.json();
+            })
+            .then(function (data) {
+              if (data.status) {
+                showTrialSuccess(plan.trial_period_days);
+              } else {
+                showFormError(errEl, btn, labelEl, data.message || 'An error occurred. Please try again.');
+              }
+            })
+            .catch(function (err) {
+              var msg = 'Network error. Please check your connection and try again.';
+              if (err && err.message && err.message.indexOf('http_') === 0) {
+                var code = err.message.replace('http_', '');
+                msg = code === '404'
+                  ? 'Trial endpoint not found (404). Please ensure the backend has been deployed.'
+                  : 'Server error (' + code + '). Please try again or contact support.';
+              }
+              showFormError(errEl, btn, labelEl, msg);
+            });
+          } else {
+            var amount = state.netAmount !== null ? state.netAmount : plan.amount;
+            postSubscribe({
+              first_name:          firstName,
+              last_name:           lastName,
+              email:               email,
+              planId:              plan.id,
+              amount:              amount,
+              promocode:           state.promoCode || 'No',
+              additional_accounts: state.additionalAccounts || 0,
+              payment_method_id:   result.paymentMethod.id,
+            }, btn, labelEl, errEl);
+          }
         });
       });
     })();

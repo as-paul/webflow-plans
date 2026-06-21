@@ -57,10 +57,9 @@
     <div id="wfm-modal1" class="wfm-overlay" role="dialog" aria-modal="true" aria-label="Choose your plan">
       <div class="wfm-scroll-body">
         <div class="wfm-container">
-          <div class="wfm-hdr">
-            <div class="wfm-hdr-left">
-              <h2 class="wfm-title">Choose Your Plan</h2>
-            </div>
+          <div class="wfm-hdr" id="wfm-modal1-hdr">
+            <button class="wfm-back" id="wfm-acct-hdr-back" onclick="wfmHideAccountsPicker()" style="display:none">← Back to plan</button>
+            <h2 class="wfm-title">Choose Your Plan</h2>
             <button class="wfm-close" onclick="wfmClose()" aria-label="Close">✕</button>
           </div>
           <div id="wfm-tabs" class="wfm-tabs"></div>
@@ -72,6 +71,24 @@
             <button class="wfm-promo-apply" onclick="wfmApplyPromo()">Apply</button>
           </div>
           <div id="wfm-promo-msg" class="wfm-promo-msg"></div>
+
+          <!-- Additional accounts picker (shown only for eligible plans) -->
+          <div id="wfm-acct-picker" class="wfm-acct-picker" style="display:none">
+            <div class="wfm-acct-body">
+              <h3 class="wfm-acct-title">Additional Accounts</h3>
+              <p class="wfm-acct-sub" id="wfm-acct-sub"></p>
+              <div class="wfm-acct-controls">
+                <button class="wfm-acct-btn" onclick="wfmChangeAccounts(-1)">−</button>
+                <span class="wfm-acct-count" id="wfm-acct-count">0</span>
+                <button class="wfm-acct-btn" onclick="wfmChangeAccounts(1)">+</button>
+              </div>
+              <div class="wfm-acct-total" id="wfm-acct-total"></div>
+              <ul class="wfm-acct-notes">
+                <li>Setup family members in the app after purchase</li>
+                <li>Discounts applied at checkout</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
       <!-- footer bar: flex sibling so it never overlaps scrollable content -->
@@ -154,6 +171,7 @@
         promoCode: '',
         promoData: null,      // { netPayAmount, discountText, promocodeMessage }
         netAmount: null,
+        additionalAccounts: 0,
       };
 
       // ── Helpers ────────────────────────────────────────────────────
@@ -172,10 +190,12 @@
         state.promoCode = '';
         state.promoData = null;
         state.netAmount = null;
+        state.additionalAccounts = 0;
 
         document.body.style.overflow = 'hidden';
         $id('wfm-promo-input').value = '';
         $id('wfm-promo-msg').innerHTML = '';
+        wfmHideAccountsPicker();
         hideFooterBar();
 
         $id('wfm-modal1').classList.add('wfm-open');
@@ -441,25 +461,127 @@
           });
         });
 
+      // ── Additional accounts picker ─────────────────────────────────
+      function wfmPlanSections() {
+        return [$id('wfm-tabs'), $id('wfm-plan-list'),
+                document.querySelector('.wfm-promo-row'), $id('wfm-promo-msg')];
+      }
+
+      function setPickerHeader(active) {
+        var hdr  = $id('wfm-modal1-hdr');
+        var back = $id('wfm-acct-hdr-back');
+        if (active) {
+          hdr.classList.add('wfm-hdr--3col');
+          back.style.display = '';
+        } else {
+          hdr.classList.remove('wfm-hdr--3col');
+          back.style.display = 'none';
+        }
+      }
+
+      window.wfmHideAccountsPicker = function () {
+        $id('wfm-acct-picker').style.display = 'none';
+        wfmPlanSections().forEach(function (el) { if (el) el.style.display = ''; });
+        setPickerHeader(false);
+      };
+
+      function wfmShowAccountsPicker() {
+        var plan = state.selectedPlan;
+        state.additionalAccounts = 0;
+        var fee = parseFloat(plan.additional_subaccount_fee) || 0;
+        var max = parseInt(plan.additional_sub_accounts_allowed, 10) || 0;
+        $id('wfm-acct-sub').textContent = 'Add more accounts ($' + fee.toFixed(2) + ' per account)';
+        $id('wfm-acct-count').textContent = '0 / ' + max;
+        updateAcctTotal();
+        wfmPlanSections().forEach(function (el) { if (el) el.style.display = 'none'; });
+        $id('wfm-acct-picker').style.display = 'block';
+        setPickerHeader(true);
+      }
+
+      window.wfmChangeAccounts = function (delta) {
+        var plan = state.selectedPlan;
+        var max  = parseInt(plan.additional_sub_accounts_allowed, 10) || 0;
+        state.additionalAccounts = Math.max(0, Math.min(max, state.additionalAccounts + delta));
+        $id('wfm-acct-count').textContent = state.additionalAccounts + ' / ' + max;
+        updateAcctTotal();
+      };
+
+      function updateAcctTotal() {
+        var plan  = state.selectedPlan;
+        var fee   = parseFloat(plan.additional_subaccount_fee) || 0;
+        var base  = state.netAmount !== null ? state.netAmount : plan.amount;
+        var extra = state.additionalAccounts * fee;
+        var total = parseFloat(base) + extra;
+        $id('wfm-acct-total').textContent = 'Total due today: $' + total.toFixed(2);
+        // Keep footer bar price in sync
+        $id('wfm-bar-price').textContent = '$' + total.toFixed(2) + '/period';
+      }
+
+      window.wfmConfirmAccounts = function () {
+        var plan  = state.selectedPlan;
+        var fee   = parseFloat(plan.additional_subaccount_fee) || 0;
+        var base  = state.netAmount !== null ? state.netAmount : plan.amount;
+        state.netAmount = parseFloat(base) + state.additionalAccounts * fee;
+        wfmHideAccountsPicker();
+        wfmOpenModal2();
+      };
+
+      // ── Step 2 ─────────────────────────────────────────────────────
       window.wfmOpenStep2 = function () {
         if (!state.selectedPlan) return;
-        var plan   = state.selectedPlan;
-        var amount = state.netAmount !== null ? state.netAmount : plan.amount;
 
-        // Build summary panel
+        // If the accounts picker is active, footer Continue = confirm selection
+        if ($id('wfm-acct-picker').style.display !== 'none') {
+          wfmConfirmAccounts();
+          return;
+        }
+
+        var plan = state.selectedPlan;
+        if (parseInt(plan.additional_sub_accounts_allowed, 10) > 0) {
+          wfmShowAccountsPicker();
+          return;
+        }
+        wfmOpenModal2();
+      };
+
+      function wfmOpenModal2() {
+        var plan    = state.selectedPlan;
+        var baseAmt = parseFloat(plan.amount);
+        var fee     = parseFloat(plan.additional_subaccount_fee) || 0;
+        var acctCost = state.additionalAccounts * fee;
+        var total   = state.netAmount !== null ? parseFloat(state.netAmount) : baseAmt;
+
+        // Discount row
+        var discountAmt = 0;
+        var discountLabel = 'Discount';
+        if (state.promoData) {
+          var promoNet = parseFloat(state.promoData.netPayAmount);
+          discountAmt  = Math.max(0, baseAmt - promoNet);
+          if (state.promoData.discountText && state.promoData.discountText.toLowerCase().includes('month')) {
+            discountLabel = 'Promo (' + state.promoData.discountText + ')';
+          }
+        }
+        var discountValue = discountAmt > 0
+          ? '<strong style="color:var(--ok,#2e9e5b);">-$' + discountAmt.toFixed(2) + '</strong>'
+          : '<strong>$0.00</strong>';
+
+        // Additional accounts row
+        var acctRow = state.additionalAccounts > 0
+          ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong>$' + acctCost.toFixed(2) + '</strong></div>'
+          : '';
+
+        // Features list
         var features = (plan.features || []).slice(0, 6).map(function (f) {
           return '<li>' + checkSvg() + '<span>' + f + '</span></li>';
         }).join('');
-        var promoRow = state.promoData
-          ? '<div class="wfm-summary-row"><span>Promo discount</span><strong style="color:var(--ok,#2e9e5b);">-' + state.promoData.discountText + '</strong></div>'
-          : '';
 
         $id('wfm-summary-content').innerHTML =
-            '<div class="wfm-summary-row"><span>Plan</span><strong>' + plan.name + '</strong></div>'
-          + '<div class="wfm-summary-row"><span>Billing</span><strong>' + plan.plan_duration + '</strong></div>'
-          + promoRow
-          + '<div class="wfm-summary-row"><span>Total due today</span></div>'
-          + '<div class="wfm-summary-total">$' + amount + '</div>'
+            '<div class="wfm-summary-row wfm-summary-row--plan"><span>' + plan.name + '</span><span class="wfm-summary-period">' + plan.plan_duration + '</span></div>'
+          + '<div class="wfm-summary-row"><span>Primary Account</span><strong>$' + baseAmt.toFixed(2) + '</strong></div>'
+          + '<div class="wfm-summary-row"><span>' + discountLabel + '</span>' + discountValue + '</div>'
+          + acctRow
+          + '<div class="wfm-summary-row wfm-summary-row--total"><span>Total Amount</span><strong>$' + total.toFixed(2) + '</strong></div>'
+          + '<div class="wfm-summary-total">$' + total.toFixed(2) + '</div>'
           + (features ? '<ul class="wfm-summary-features">' + features + '</ul>' : '');
 
         $id('wfm-modal1').classList.remove('wfm-open');
@@ -473,7 +595,7 @@
             cardElement.mount('#wfm-card-element');
           }
         }
-      };
+      }
 
       // ── T&C checkbox ───────────────────────────────────────────────
       function bindTnc() {
@@ -576,7 +698,7 @@
             planId:              plan.id,
             amount:              amount,
             promocode:           state.promoCode || 'No',
-            additional_accounts: 0,
+            additional_accounts: state.additionalAccounts || 0,
             payment_method_id:   result.paymentMethod.id,
           }, btn, labelEl, errEl);
         });

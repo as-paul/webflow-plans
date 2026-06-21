@@ -446,6 +446,32 @@
         color: #fff;
         font-weight: 700;
       }
+      /* Plan name header row */
+      .wfm-summary-row--plan {
+        font-weight: 700;
+        color: #fff;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        margin-bottom: 4px;
+        align-items: baseline;
+      }
+      .wfm-summary-period {
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.45);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      /* Total row — bolder, no bottom border, separates from breakdown */
+      .wfm-summary-row--total {
+        border-top: 1px solid rgba(255, 255, 255, 0.15);
+        border-bottom: none;
+        margin-top: 4px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .wfm-summary-row--total strong {
+        font-size: 15px;
+      }
       .wfm-summary-total {
         margin-top: 8px;
         font-size: 28px;
@@ -647,5 +673,82 @@
       .wfm-submit-btn--full {
         width: 100%;
         margin-top: 8px;
+      }
+
+      /* ---- Additional accounts picker ---- */
+      .wfm-acct-body {
+        max-width: 480px;
+        margin: 0 auto;
+        text-align: center;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        padding: 40px 36px;
+      }
+      .wfm-acct-title {
+        font-size: 22px;
+        font-weight: 800;
+        color: #fff;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+      }
+      .wfm-acct-sub {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.6);
+        margin: 0 0 32px;
+      }
+      .wfm-acct-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+        margin-bottom: 20px;
+      }
+      .wfm-acct-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1.5px solid rgba(255, 255, 255, 0.2);
+        color: #fff;
+        font-size: 22px;
+        line-height: 1;
+        cursor: pointer;
+        font-family: inherit;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.18s;
+      }
+      .wfm-acct-btn:hover {
+        background: rgba(255, 255, 255, 0.18);
+      }
+      .wfm-acct-count {
+        font-size: 28px;
+        font-weight: 800;
+        color: #fff;
+        min-width: 64px;
+        text-align: center;
+      }
+      .wfm-acct-total {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--gold-hi, #e8a020);
+        margin-bottom: 24px;
+      }
+      .wfm-acct-notes {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .wfm-acct-notes li {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.5);
+      }
+      .wfm-acct-notes li::before {
+        content: '• ';
       }
 

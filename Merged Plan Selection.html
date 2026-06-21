@@ -13,7 +13,7 @@
 
     <!-- ===== WEBFLOW PLAN SELECTION MODALS ===== -->
     <link rel="stylesheet" href="plan-modals.css">
-
+    <script src="https://js.stripe.com/v3/"></script>
   </head>
   <body>
     <section class="sec" style="padding-top:64px;" id="choose">
@@ -118,6 +118,11 @@
                 <label for="wfm-email">Email Address</label>
                 <input class="wfm-input" id="wfm-email" name="email" type="email" placeholder="john@example.com" required autocomplete="email">
               </div>
+              <div class="wfm-field">
+                <label>Card Details</label>
+                <div id="wfm-card-element" class="wfm-card-element"></div>
+                <div id="wfm-card-errors" class="wfm-card-errors"></div>
+              </div>
               <label class="wfm-tnc-row">
                 <input type="checkbox" id="wfm-tnc">
                 <span>I agree to the <a href="https://attorney-shield.com/policies/terms-of-service" target="_blank">Terms of Service</a> and <a href="https://attorney-shield.com/policies/privacy-policy" target="_blank">Privacy Policy</a>.</span>
@@ -182,13 +187,43 @@
         }
       };
 
+      // Capture original form-card markup once so we can restore it after the success screen
+      var originalFormCardHTML = $id('wfm-modal2').querySelector('.wfm-form-card').innerHTML;
+
+      function resetStep2() {
+        // Restore form HTML if the success screen replaced it
+        var formCard = $id('wfm-modal2').querySelector('.wfm-form-card');
+        if (!$id('wfm-account-form')) {
+          formCard.innerHTML = originalFormCardHTML;
+          bindTnc(); // re-attach T&C listener after restoring the DOM
+        }
+        // Clear text inputs
+        $id('wfm-first').value  = '';
+        $id('wfm-last').value   = '';
+        $id('wfm-email').value  = '';
+        // Reset checkbox and submit button
+        $id('wfm-tnc').checked        = false;
+        $id('wfm-submit-btn').disabled = true;
+        $id('wfm-submit-label').textContent = 'Proceed to Payment';
+        // Clear error
+        var errEl = $id('wfm-error');
+        errEl.textContent = '';
+        errEl.classList.remove('wfm-visible');
+        // Clear Stripe card element
+        if (cardElement) {
+          cardElement.clear();
+        }
+      }
+
       window.wfmClose = function () {
+        resetStep2();
         $id('wfm-modal1').classList.remove('wfm-open');
         $id('wfm-modal2').classList.remove('wfm-open');
         document.body.style.overflow = '';
       };
 
       window.wfmBackToPlans = function () {
+        resetStep2();
         $id('wfm-modal2').classList.remove('wfm-open');
         $id('wfm-modal1').classList.add('wfm-open');
       };
@@ -369,9 +404,46 @@
       };
 
       // ── Open Step 2 ────────────────────────────────────────────────
+      // ── Stripe setup ──────────────────────────────────────────────
+      var stripe = null;
+      var cardElement = null;
+
+      fetch(WEB_API_BASE + '/webflow/config', { credentials: 'omit' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.stripePk) return;
+          stripe = Stripe(data.stripePk);
+          var elements = stripe.elements({
+            appearance: { theme: 'night', variables: { fontFamily: 'Inter, sans-serif' } },
+          });
+          cardElement = elements.create('card', {
+            hidePostalCode: true,
+            disableLink: true,
+            style: {
+              base: {
+                color: '#ffffff',
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '15px',
+                '::placeholder': { color: 'rgba(255,255,255,0.38)' },
+              },
+              invalid: { color: '#e05c5c' },
+            },
+          });
+          cardElement.on('change', function (event) {
+            var el = $id('wfm-card-errors');
+            el.textContent = event.error ? event.error.message : '';
+          });
+          cardElement.on('focus', function () {
+            $id('wfm-card-element').classList.add('wfm-card-element--focus');
+          });
+          cardElement.on('blur', function () {
+            $id('wfm-card-element').classList.remove('wfm-card-element--focus');
+          });
+        });
+
       window.wfmOpenStep2 = function () {
         if (!state.selectedPlan) return;
-        var plan = state.selectedPlan;
+        var plan   = state.selectedPlan;
         var amount = state.netAmount !== null ? state.netAmount : plan.amount;
 
         // Build summary panel
@@ -383,7 +455,7 @@
           : '';
 
         $id('wfm-summary-content').innerHTML =
-          '<div class="wfm-summary-row"><span>Plan</span><strong>' + plan.name + '</strong></div>'
+            '<div class="wfm-summary-row"><span>Plan</span><strong>' + plan.name + '</strong></div>'
           + '<div class="wfm-summary-row"><span>Billing</span><strong>' + plan.plan_duration + '</strong></div>'
           + promoRow
           + '<div class="wfm-summary-row"><span>Total due today</span></div>'
@@ -393,59 +465,121 @@
         $id('wfm-modal1').classList.remove('wfm-open');
         $id('wfm-modal2').classList.add('wfm-open');
         $id('wfm-modal2').scrollTop = 0;
+
+        // Mount card element once the modal is visible
+        if (cardElement) {
+          var container = $id('wfm-card-element');
+          if (container && !container.hasChildNodes()) {
+            cardElement.mount('#wfm-card-element');
+          }
+        }
       };
 
       // ── T&C checkbox ───────────────────────────────────────────────
-      $id('wfm-tnc').addEventListener('change', function () {
-        $id('wfm-submit-btn').disabled = !this.checked;
-      });
+      function bindTnc() {
+        $id('wfm-tnc').addEventListener('change', function () {
+          $id('wfm-submit-btn').disabled = !this.checked;
+        });
+      }
+      bindTnc();
 
-      // ── Checkout form submit ───────────────────────────────────────
+      // ── Helpers ────────────────────────────────────────────────────
+      function showFormError(errEl, btn, labelEl, msg) {
+        errEl.textContent = msg;
+        errEl.classList.add('wfm-visible');
+        btn.disabled = false;
+        labelEl.textContent = 'Proceed to Payment';
+      }
+
+      function showPaymentSuccess() {
+        $id('wfm-modal2').querySelector('.wfm-form-card').innerHTML =
+          '<div class="wfm-success">'
+          + '<div class="wfm-success-icon">✓</div>'
+          + '<h2 class="wfm-success-title">Payment Successful!</h2>'
+          + '<p class="wfm-success-msg">Your account has been activated. Please go to the Attorney Shield app, navigate to the login screen, then enter your email to complete your enrollment.</p>'
+          + '<button class="wfm-submit-btn wfm-submit-btn--full" onclick="wfmClose()">Done</button>'
+          + '</div>';
+      }
+
+      function postSubscribe(payload, btn, labelEl, errEl) {
+        return fetch(WEB_API_BASE + '/webflow/subscribe', {
+          method: 'POST',
+          credentials: 'omit',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.requiresAction) {
+              // 3-D Secure — hand off to Stripe's popup
+              return stripe.handleCardAction(data.clientSecret)
+                .then(function (result) {
+                  if (result.error) {
+                    showFormError(errEl, btn, labelEl, result.error.message);
+                  } else {
+                    return postSubscribe({
+                      payment_intent_id:   result.paymentIntent.id,
+                      email:               payload.email,
+                      planId:              payload.planId,
+                      amount:              payload.amount,
+                      promocode:           payload.promocode,
+                      additional_accounts: payload.additional_accounts,
+                    }, btn, labelEl, errEl);
+                  }
+                });
+            }
+            if (data.status) {
+              showPaymentSuccess();
+            } else {
+              showFormError(errEl, btn, labelEl, data.message || 'An error occurred. Please try again.');
+            }
+          })
+          .catch(function () {
+            showFormError(errEl, btn, labelEl, 'Network error. Please check your connection and try again.');
+          });
+      }
+
+      // ── Form submit ────────────────────────────────────────────────
       $id('wfm-account-form').addEventListener('submit', function (e) {
         e.preventDefault();
-        var btn      = $id('wfm-submit-btn');
-        var labelEl  = $id('wfm-submit-label');
-        var errEl    = $id('wfm-error');
+        if (!stripe || !cardElement) {
+          return;
+        }
+        var btn     = $id('wfm-submit-btn');
+        var labelEl = $id('wfm-submit-label');
+        var errEl   = $id('wfm-error');
 
         btn.disabled = true;
         labelEl.textContent = 'Processing…';
         errEl.classList.remove('wfm-visible');
         errEl.textContent = '';
 
-        var plan   = state.selectedPlan;
-        var amount = state.netAmount !== null ? state.netAmount : plan.amount;
+        var plan      = state.selectedPlan;
+        var amount    = state.netAmount !== null ? state.netAmount : plan.amount;
+        var firstName = $id('wfm-first').value.trim();
+        var lastName  = $id('wfm-last').value.trim();
+        var email     = $id('wfm-email').value.trim().toLowerCase();
 
-        fetch(WEB_API_BASE + '/webflow/checkout', {
-          method: 'POST',
-          credentials: 'omit',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            first_name:          $id('wfm-first').value.trim(),
-            last_name:           $id('wfm-last').value.trim(),
-            email:               $id('wfm-email').value.trim().toLowerCase(),
+        stripe.createPaymentMethod({
+          type: 'card',
+          card: cardElement,
+          billing_details: { name: firstName + ' ' + lastName, email: email },
+        }).then(function (result) {
+          if (result.error) {
+            showFormError(errEl, btn, labelEl, result.error.message);
+            return;
+          }
+          postSubscribe({
+            first_name:          firstName,
+            last_name:           lastName,
+            email:               email,
             planId:              plan.id,
             amount:              amount,
             promocode:           state.promoCode || 'No',
             additional_accounts: 0,
-          }),
-        })
-          .then(function (r) { return r.json(); })
-          .then(function (data) {
-            if (data.status && data.url) {
-              window.location.href = data.url;
-            } else {
-              errEl.textContent = data.message || 'An error occurred. Please try again.';
-              errEl.classList.add('wfm-visible');
-              btn.disabled = false;
-              labelEl.textContent = 'Proceed to Payment';
-            }
-          })
-          .catch(function () {
-            errEl.textContent = 'Network error. Please check your connection and try again.';
-            errEl.classList.add('wfm-visible');
-            btn.disabled = false;
-            labelEl.textContent = 'Proceed to Payment';
-          });
+            payment_method_id:   result.paymentMethod.id,
+          }, btn, labelEl, errEl);
+        });
       });
     })();
     </script>

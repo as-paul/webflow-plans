@@ -589,4 +589,63 @@
       .wfm-error-msg.wfm-visible {
         display: block;
       }
-    
+
+      /* ---- Stripe card element ---- */
+      .wfm-card-element {
+        background: rgba(255, 255, 255, 0.07);
+        border: 1.5px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        padding: 14px 16px;
+        transition: border-color 0.18s;
+      }
+      .wfm-card-element--focus {
+        border-color: var(--gold, #c4850a);
+      }
+      .wfm-card-errors {
+        margin-top: 7px;
+        font-size: 13px;
+        color: #e05c5c;
+        min-height: 18px;
+      }
+
+      /* ---- Payment success state ---- */
+      .wfm-success {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 40px 20px;
+        gap: 16px;
+        flex: 1;
+      }
+      .wfm-success-icon {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: rgba(46, 158, 91, 0.18);
+        border: 2px solid rgba(46, 158, 91, 0.5);
+        color: #2e9e5b;
+        font-size: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .wfm-success-title {
+        font-size: 22px;
+        font-weight: 800;
+        color: #fff;
+        margin: 0;
+      }
+      .wfm-success-msg {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.65);
+        line-height: 1.55;
+        max-width: 320px;
+        margin: 0;
+      }
+      .wfm-submit-btn--full {
+        width: 100%;
+        margin-top: 8px;
+      }
+

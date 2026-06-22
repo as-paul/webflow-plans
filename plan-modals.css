@@ -752,6 +752,12 @@
         content: '• ';
       }
 
+      /* ---- Promo row hidden in trial mode ---- */
+      .wfm-overlay.wfm-trial-mode .wfm-promo-row,
+      .wfm-overlay.wfm-trial-mode #wfm-promo-msg {
+        display: none !important;
+      }
+
       /* ---- Trial links (inside each main-page plan card) ---- */
       .page-card-trial {
         display: block;

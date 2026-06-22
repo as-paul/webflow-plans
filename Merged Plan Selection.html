@@ -201,6 +201,7 @@
         document.body.style.overflow = 'hidden';
         $id('wfm-promo-input').value = '';
         $id('wfm-promo-msg').innerHTML = '';
+        $id('wfm-modal1').classList.remove('wfm-trial-mode');
         wfmHideAccountsPicker();
         hideFooterBar();
 
@@ -258,10 +259,12 @@
         $id('wfm-modal2').classList.remove('wfm-open');
         $id('wfm-modal1').classList.add('wfm-open');
         if (fromPicker) {
-          // Restore netAmount to base (before picker added the extra cost)
-          var plan = state.selectedPlan;
-          var fee  = parseFloat(plan.additional_subaccount_fee) || 0;
-          state.netAmount = parseFloat(state.netAmount) - state.additionalAccounts * fee;
+          if (!state.trialMode) {
+            // Restore netAmount to base (before picker added the extra cost)
+            var plan = state.selectedPlan;
+            var fee  = parseFloat(plan.additional_subaccount_fee) || 0;
+            state.netAmount = parseFloat(state.netAmount) - state.additionalAccounts * fee;
+          }
           wfmShowAccountsPicker(true); // reopens picker with count preserved
         }
       };
@@ -519,7 +522,9 @@
         if (!preserveCount) state.additionalAccounts = 0;
         var fee = parseFloat(plan.additional_subaccount_fee) || 0;
         var max = parseInt(plan.additional_sub_accounts_allowed, 10) || 0;
-        $id('wfm-acct-sub').textContent = 'Add more accounts ($' + fee.toFixed(2) + ' per account)';
+        $id('wfm-acct-sub').textContent = state.trialMode
+          ? 'Add more accounts (free during your trial)'
+          : 'Add more accounts ($' + fee.toFixed(2) + ' per account)';
         $id('wfm-acct-count').textContent = state.additionalAccounts + ' / ' + max;
         updateAcctTotal();
         wfmPlanSections().forEach(function (el) { if (el) el.style.display = 'none'; });
@@ -536,21 +541,27 @@
       };
 
       function updateAcctTotal() {
+        if (state.trialMode) {
+          $id('wfm-acct-total').textContent = 'Total due today: $0.00';
+          $id('wfm-bar-price').textContent = '$0 due today';
+          return;
+        }
         var plan  = state.selectedPlan;
         var fee   = parseFloat(plan.additional_subaccount_fee) || 0;
         var base  = state.netAmount !== null ? state.netAmount : plan.amount;
         var extra = state.additionalAccounts * fee;
         var total = parseFloat(base) + extra;
         $id('wfm-acct-total').textContent = 'Total due today: $' + total.toFixed(2);
-        // Keep footer bar price in sync
         $id('wfm-bar-price').textContent = '$' + total.toFixed(2) + '/period';
       }
 
       window.wfmConfirmAccounts = function () {
-        var plan  = state.selectedPlan;
-        var fee   = parseFloat(plan.additional_subaccount_fee) || 0;
-        var base  = state.netAmount !== null ? state.netAmount : plan.amount;
-        state.netAmount = parseFloat(base) + state.additionalAccounts * fee;
+        if (!state.trialMode) {
+          var plan  = state.selectedPlan;
+          var fee   = parseFloat(plan.additional_subaccount_fee) || 0;
+          var base  = state.netAmount !== null ? state.netAmount : plan.amount;
+          state.netAmount = parseFloat(base) + state.additionalAccounts * fee;
+        }
         state.cameFromPicker = true;
         wfmHideAccountsPicker();
         wfmOpenModal2();
@@ -563,12 +574,6 @@
         // If the accounts picker is active, footer Continue = confirm selection
         if ($id('wfm-acct-picker').style.display !== 'none') {
           wfmConfirmAccounts();
-          return;
-        }
-
-        // Trial flow skips the additional accounts picker
-        if (state.trialMode) {
-          wfmOpenModal2();
           return;
         }
 
@@ -586,6 +591,7 @@
       window.wfmOpenTrial = function (planNameHint) {
         wfmOpen(planNameHint || null); // opens modal 1, resets all state
         state.trialMode = true; // set after wfmOpen so it survives the reset
+        $id('wfm-modal1').classList.add('wfm-trial-mode');
       };
 
       function wfmOpenModal2() {
@@ -596,9 +602,13 @@
 
         if (state.trialMode) {
           var trialDays = parseInt(plan.trial_period_days, 10) || 0;
+          var trialAcctRow = state.additionalAccounts > 0
+            ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong style="color:var(--ok,#2e9e5b);">$0.00</strong></div>'
+            : '';
           $id('wfm-summary-content').innerHTML =
               '<div class="wfm-summary-row wfm-summary-row--plan"><span>' + plan.name + '</span><span class="wfm-summary-period">Trial</span></div>'
             + '<div class="wfm-summary-row"><span>Trial Period</span><strong>' + trialDays + ' days</strong></div>'
+            + trialAcctRow
             + '<div class="wfm-summary-row"><span>Due Today</span><strong style="color:var(--ok,#2e9e5b);">$0.00</strong></div>'
             + '<div class="wfm-summary-row wfm-summary-row--total"><span>Total Amount</span><strong style="color:var(--ok,#2e9e5b);">Free</strong></div>'
             + '<div class="wfm-summary-total wfm-summary-total--trial">$0 <span class="wfm-summary-period">today</span></div>'
@@ -792,7 +802,7 @@
                 last_name:           lastName,
                 email:               email,
                 planId:              plan.id,
-                additional_accounts: 0,
+                additional_accounts: state.additionalAccounts || 0,
                 payment_method_id:   result.paymentMethod.id,
               }),
             })

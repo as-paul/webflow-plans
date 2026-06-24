@@ -400,6 +400,12 @@
       };
 
       // ── Footer bar ─────────────────────────────────────────────────
+      function formatBarDiscount(discountText) {
+        var d = (discountText || '').trim();
+        // "$ 5.20" → "-$5.20"; "2 months free" left as-is
+        return d.indexOf('$') !== -1 ? '-' + d.replace(/\s+/g, '') : d;
+      }
+
       function showFooterBar() {
         if (!state.selectedPlan) return;
         var plan = state.selectedPlan;
@@ -408,12 +414,12 @@
           $id('wfm-bar-name').textContent = plan.name + ' — ' + days + '-Day Trial';
           $id('wfm-bar-price').textContent = '$0 due today';
         } else {
-          var amount = state.netAmount !== null ? state.netAmount : plan.amount;
+          var amount = parseFloat(state.netAmount !== null ? state.netAmount : plan.amount).toFixed(2);
           var promoHtml = state.promoData
-            ? '<span class="wfm-bar-promo">' + state.promoData.discountText + '</span>'
+            ? '<span class="wfm-bar-promo">' + formatBarDiscount(state.promoData.discountText) + '</span>'
             : '';
           $id('wfm-bar-name').textContent = plan.name + ' — ' + plan.plan_duration;
-          $id('wfm-bar-price').innerHTML = '$' + amount + '/period ' + promoHtml;
+          $id('wfm-bar-price').innerHTML = '$' + amount + ' due today ' + promoHtml;
         }
         $id('wfm-footer-bar').classList.add('wfm-bar-visible');
       }
@@ -552,7 +558,7 @@
         var extra = state.additionalAccounts * fee;
         var total = parseFloat(base) + extra;
         $id('wfm-acct-total').textContent = 'Total due today: $' + total.toFixed(2);
-        $id('wfm-bar-price').textContent = '$' + total.toFixed(2) + '/period';
+        $id('wfm-bar-price').textContent = '$' + total.toFixed(2) + ' due today';
       }
 
       window.wfmConfirmAccounts = function () {

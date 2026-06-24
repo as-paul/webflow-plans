@@ -280,13 +280,19 @@
       };
 
       window.wfmBackToPlans = function () {
-        var fromPicker = state.cameFromPicker;
+        var fromPicker   = state.cameFromPicker;
+        var wasTrialMode = state.trialMode; // capture before resetStep2 clears it
         state.cameFromPicker = false;
         resetStep2();
+        // Restore trial mode so Modal 1 stays in the trial flow
+        if (wasTrialMode) {
+          state.trialMode = true;
+          $id('wfm-modal1').classList.add('wfm-trial-mode');
+        }
         $id('wfm-modal2').classList.remove('wfm-open');
         $id('wfm-modal1').classList.add('wfm-open');
         if (fromPicker) {
-          if (!state.trialMode) {
+          if (!wasTrialMode) {
             // Restore netAmount to base (before picker added the extra cost)
             var plan = state.selectedPlan;
             var fee  = parseFloat(plan.additional_subaccount_fee) || 0;

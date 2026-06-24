@@ -766,7 +766,12 @@
       }
       function bindTrialTnc() {
         function updateTrialBtn() {
-          var tnc      = $id('wfm-tnc');
+          var tnc = $id('wfm-tnc');
+          if (!state.trialMode) {
+            // Stale listener firing during a paid checkout — defer to bindTnc result
+            $id('wfm-submit-btn').disabled = !(tnc && tnc.checked);
+            return;
+          }
           var trialTnc = $id('wfm-trial-tnc');
           $id('wfm-submit-btn').disabled = !(tnc && tnc.checked && trialTnc && trialTnc.checked);
         }
@@ -815,7 +820,7 @@
           '<div class="wfm-success">'
           + '<div class="wfm-success-icon">✓</div>'
           + '<h2 class="wfm-success-title">Trial Started!</h2>'
-          + '<p class="wfm-success-msg">Your ' + trialDays + '-day free trial is now active. Please go to the Attorney Shield app, navigate to the login screen, then enter your email to complete your enrollment.</p>'
+          + '<p class="wfm-success-msg">Your ' + trialDays + '-day free preview is now active. Please go to the Attorney Shield app, navigate to the login screen, then enter your email to complete your enrollment.</p>'
           + '<button class="wfm-submit-btn wfm-submit-btn--full" onclick="wfmClose()">Done</button>'
           + '</div>';
       }
@@ -869,7 +874,8 @@
       }
 
       // ── Form submit ────────────────────────────────────────────────
-      $id('wfm-account-form').addEventListener('submit', function (e) {
+      document.addEventListener('submit', function (e) {
+        if (!e.target || e.target.id !== 'wfm-account-form') return;
         e.preventDefault();
         if (!stripe || !cardElement) {
           return;

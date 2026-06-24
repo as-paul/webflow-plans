@@ -410,7 +410,7 @@
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 20px;
-        padding: 22px 22px;
+        padding: 22px 22px 48px;
         color: #fff;
         display: flex;
         flex-direction: column;
@@ -786,8 +786,15 @@
       .wfm-summary-total--trial {
         color: var(--ok, #2e9e5b);
       }
+      #wfm-summary-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding-bottom: 16px;
+      }
+
       .wfm-trial-notice {
-        margin-top: 0;
+        margin-top: auto;
         font-size: 12.5px;
         color: rgba(255, 255, 255, 0.42);
         line-height: 1.55;
@@ -817,23 +824,19 @@
         display: flex;
         align-items: center;
         gap: 14px;
-        margin-bottom: 4px;
+        margin-bottom: 14px;
       }
       .wfm-plan-icon {
-        width: 42px;
-        height: 42px;
-        border-radius: 10px;
-        background: rgba(196, 133, 10, 0.12);
-        border: 1.5px solid rgba(196, 133, 10, 0.3);
+        width: 48px;
+        height: 48px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
       }
       .wfm-plan-icon-svg {
-        width: 22px;
-        height: 22px;
-        color: var(--gold-hi, #e8a020);
+        width: 48px;
+        height: 54px;
       }
       .wfm-plan-header-info {
         display: flex;
@@ -874,21 +877,24 @@
       /* ---- Trial legal callout box ---- */
       .wfm-trial-callout {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         gap: 10px;
-        background: rgba(196, 133, 10, 0.08);
+        background: transparent;
         border: 1px solid rgba(196, 133, 10, 0.25);
-        border-radius: 10px;
-        padding: 10px 14px;
+        border-radius: 6px;
+        padding: 16px 14px;
         margin-top: 10px;
-        font-size: 12px;
+        font-size: 10px;
         color: rgba(255, 255, 255, 0.72);
         line-height: 1.45;
       }
       .wfm-trial-callout-icon {
-        font-size: 16px;
+        width: 32px;
+        height: 30px;
         flex-shrink: 0;
         margin-top: 1px;
+        color: var(--gold-hi, #e8a020);
+        opacity: 0.9;
       }
 
       /* ---- Trial form card layout ---- */

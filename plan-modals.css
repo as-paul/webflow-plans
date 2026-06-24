@@ -24,7 +24,7 @@
       .wfm-container {
         max-width: 960px;
         margin: 0 auto;
-        padding: 40px 28px 40px;
+        padding: 28px 28px 28px;
         width: 100%;
       }
 
@@ -33,7 +33,7 @@
         display: grid;
         grid-template-columns: 1fr auto; /* title fills centre, close pins right */
         align-items: center;
-        margin-bottom: 28px;
+        margin-bottom: 20px;
         gap: 14px;
       }
       .wfm-hdr-left {
@@ -58,7 +58,7 @@
         background: rgba(255, 255, 255, 0.13);
       }
       .wfm-title {
-        font-size: clamp(22px, 3vw, 30px);
+        font-size: clamp(18px, 2.5vw, 24px);
         font-weight: 800;
         letter-spacing: -0.025em;
         color: #fff;
@@ -398,7 +398,7 @@
       .wfm-two-col {
         display: grid;
         grid-template-columns: 1fr 1.2fr;
-        gap: 40px;
+        gap: 24px;
         align-items: stretch; /* both cards same height */
       }
       @media (max-width: 680px) {
@@ -410,7 +410,7 @@
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 20px;
-        padding: 30px 26px;
+        padding: 22px 22px;
         color: #fff;
         display: flex;
         flex-direction: column;
@@ -418,24 +418,24 @@
       /* step-2 header: back | title (centred) | close */
       .wfm-hdr--3col {
         grid-template-columns: auto 1fr auto;
-        margin-bottom: 48px;
+        margin-bottom: 28px;
       }
       .wfm-hdr--3col .wfm-title {
         text-align: center;
       }
       .wfm-summary-card h4 {
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 800;
         letter-spacing: 0.12em;
         text-transform: uppercase;
         color: var(--gold-hi, #e8a020);
-        margin: 0 0 18px;
+        margin: 0 0 12px;
       }
       .wfm-summary-row {
         display: flex;
         justify-content: space-between;
-        font-size: 14px;
-        padding: 10px 0;
+        font-size: 13px;
+        padding: 7px 0;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         color: rgba(255, 255, 255, 0.8);
       }
@@ -509,37 +509,37 @@
         background: rgba(255, 255, 255, 0.04);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 20px;
-        padding: 34px 30px;
+        padding: 24px 24px;
         display: flex;
         flex-direction: column;
       }
       .wfm-form-card h3 {
-        font-size: 22px;
+        font-size: 18px;
         font-weight: 800;
         color: #fff;
         letter-spacing: -0.02em;
-        margin: 0 0 24px;
+        margin: 0 0 16px;
       }
       .wfm-field {
-        margin-bottom: 16px;
+        margin-bottom: 12px;
       }
       .wfm-field label {
         display: block;
-        font-size: 12.5px;
+        font-size: 11.5px;
         font-weight: 700;
         color: rgba(255, 255, 255, 0.55);
         letter-spacing: 0.06em;
         text-transform: uppercase;
-        margin-bottom: 7px;
+        margin-bottom: 5px;
       }
       .wfm-input {
         width: 100%;
         background: rgba(255, 255, 255, 0.07);
         border: 1.5px solid rgba(255, 255, 255, 0.15);
         border-radius: 12px;
-        padding: 13px 16px;
+        padding: 10px 14px;
         color: #fff;
-        font-size: 15px;
+        font-size: 14px;
         font-family: inherit;
         outline: none;
         transition: border-color 0.18s;
@@ -554,11 +554,11 @@
       .wfm-tnc-row {
         display: flex;
         align-items: flex-start;
-        gap: 11px;
-        margin: 20px 0 22px;
-        font-size: 13px;
+        gap: 10px;
+        margin: 12px 0 12px;
+        font-size: 12.5px;
         color: rgba(255, 255, 255, 0.65);
-        line-height: 1.5;
+        line-height: 1.45;
       }
       .wfm-tnc-row input[type="checkbox"] {
         width: 17px;
@@ -574,12 +574,12 @@
       }
       .wfm-submit-btn {
         width: 100%;
-        padding: 16px;
+        padding: 13px 16px;
         border-radius: 100px;
         background: var(--gold, #c4850a);
         border: none;
         color: #1c1304;
-        font-size: 15.5px;
+        font-size: 14px;
         font-weight: 800;
         cursor: pointer;
         font-family: inherit;
@@ -621,7 +621,7 @@
         background: rgba(255, 255, 255, 0.07);
         border: 1.5px solid rgba(255, 255, 255, 0.15);
         border-radius: 12px;
-        padding: 14px 16px;
+        padding: 11px 14px;
         transition: border-color 0.18s;
       }
       .wfm-card-element--focus {
@@ -787,10 +787,140 @@
         color: var(--ok, #2e9e5b);
       }
       .wfm-trial-notice {
-        margin-top: 18px;
+        margin-top: 0;
         font-size: 12.5px;
         color: rgba(255, 255, 255, 0.42);
         line-height: 1.55;
         font-style: italic;
+      }
+
+      /* ---- Modal 2 header center column ---- */
+      .wfm-hdr-center {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .wfm-step-label {
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--gold-hi, #e8a020);
+      }
+      .wfm-hdr--3col .wfm-hdr-center .wfm-title {
+        text-align: center;
+      }
+
+      /* ---- Trial plan header in summary card ---- */
+      .wfm-plan-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 4px;
+      }
+      .wfm-plan-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        background: rgba(196, 133, 10, 0.12);
+        border: 1.5px solid rgba(196, 133, 10, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .wfm-plan-icon-svg {
+        width: 22px;
+        height: 22px;
+        color: var(--gold-hi, #e8a020);
+      }
+      .wfm-plan-header-info {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .wfm-plan-header-name {
+        font-size: 14px;
+        font-weight: 800;
+        color: #fff;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+      }
+      .wfm-preview-badge {
+        display: inline-block;
+        background: rgba(196, 133, 10, 0.15);
+        border: 1px solid rgba(196, 133, 10, 0.4);
+        color: var(--gold-hi, #e8a020);
+        font-size: 9.5px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        padding: 4px 10px;
+        border-radius: 4px;
+      }
+      .wfm-summary-divider {
+        border: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        margin: 8px 0;
+      }
+      .wfm-info-icon {
+        font-style: normal;
+        cursor: help;
+        opacity: 0.5;
+        font-size: 11px;
+      }
+
+      /* ---- Trial legal callout box ---- */
+      .wfm-trial-callout {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        background: rgba(196, 133, 10, 0.08);
+        border: 1px solid rgba(196, 133, 10, 0.25);
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin-top: 10px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.72);
+        line-height: 1.45;
+      }
+      .wfm-trial-callout-icon {
+        font-size: 16px;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+
+      /* ---- Trial form card layout ---- */
+      .wfm-form-card.wfm-trial-form .wfm-name-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+      .wfm-form-card.wfm-trial-form .wfm-name-row .wfm-field {
+        margin-bottom: 0;
+      }
+      @media (max-width: 480px) {
+        .wfm-form-card.wfm-trial-form .wfm-name-row {
+          grid-template-columns: 1fr;
+        }
+      }
+      .wfm-trial-billing-notice {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+        line-height: 1.5;
+        margin: 0 0 10px;
+      }
+      .wfm-trial-help {
+        text-align: center;
+        font-size: 12.5px;
+        color: rgba(255, 255, 255, 0.45);
+        margin-top: 10px;
+      }
+      .wfm-trial-help a {
+        color: var(--gold-hi, #e8a020);
+        text-decoration: underline;
+        text-underline-offset: 3px;
       }
 

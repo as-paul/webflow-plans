@@ -112,7 +112,10 @@
       <div class="wfm-container">
         <div class="wfm-hdr wfm-hdr--3col">
           <button class="wfm-back" onclick="wfmBackToPlans()">← Back</button>
-          <h2 class="wfm-title">Get Started</h2>
+          <div class="wfm-hdr-center">
+            <div class="wfm-step-label" id="wfm-step-label" style="display:none"></div>
+            <h2 class="wfm-title">Get Started</h2>
+          </div>
           <button class="wfm-close" onclick="wfmClose()" aria-label="Close">✕</button>
         </div>
         <div class="wfm-two-col">
@@ -125,32 +128,41 @@
           <div class="wfm-form-card">
             <h3>Create your account</h3>
             <form id="wfm-account-form" autocomplete="on">
-              <div class="wfm-field">
-                <label for="wfm-first">First Name</label>
-                <input class="wfm-input" id="wfm-first" name="first_name" type="text" placeholder="John" required autocomplete="given-name">
-              </div>
-              <div class="wfm-field">
-                <label for="wfm-last">Last Name</label>
-                <input class="wfm-input" id="wfm-last" name="last_name" type="text" placeholder="Doe" required autocomplete="family-name">
+              <div class="wfm-name-row">
+                <div class="wfm-field">
+                  <label for="wfm-first">First Name</label>
+                  <input class="wfm-input" id="wfm-first" name="first_name" type="text" placeholder="First name" required autocomplete="given-name">
+                </div>
+                <div class="wfm-field">
+                  <label for="wfm-last">Last Name</label>
+                  <input class="wfm-input" id="wfm-last" name="last_name" type="text" placeholder="Last name" required autocomplete="family-name">
+                </div>
               </div>
               <div class="wfm-field">
                 <label for="wfm-email">Email Address</label>
-                <input class="wfm-input" id="wfm-email" name="email" type="email" placeholder="john@example.com" required autocomplete="email">
+                <input class="wfm-input" id="wfm-email" name="email" type="email" placeholder="Email address" required autocomplete="email">
               </div>
               <div class="wfm-field">
                 <label>Card Details</label>
                 <div id="wfm-card-element" class="wfm-card-element"></div>
                 <div id="wfm-card-errors" class="wfm-card-errors"></div>
               </div>
+              <p class="wfm-trial-billing-notice" id="wfm-trial-billing-notice" style="display:none"></p>
               <label class="wfm-tnc-row">
                 <input type="checkbox" id="wfm-tnc">
                 <span>I agree to the <a href="https://attorney-shield.com/policies/terms-of-service" target="_blank">Terms of Service</a> and <a href="https://attorney-shield.com/policies/privacy-policy" target="_blank">Privacy Policy</a>.</span>
               </label>
+              <label class="wfm-tnc-row wfm-trial-tnc-row" id="wfm-trial-tnc-row" style="display:none">
+                <input type="checkbox" id="wfm-trial-tnc">
+                <span id="wfm-trial-tnc-label"></span>
+              </label>
               <button type="submit" class="wfm-submit-btn" id="wfm-submit-btn" disabled>
+                <svg id="wfm-submit-shield" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none;flex-shrink:0"><path d="M12 1L3 5v6c0 5.25 3.58 10.15 9 11.35C17.42 21.15 21 16.25 21 11V5l-9-4z"/></svg>
                 <span id="wfm-submit-label">Proceed to Payment</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
               </button>
               <div id="wfm-error" class="wfm-error-msg"></div>
+              <p class="wfm-trial-help" id="wfm-trial-help" style="display:none">Need help? <a href="mailto:support@attorney-shield.com">Contact us</a></p>
             </form>
           </div>
         </div>
@@ -230,8 +242,23 @@
         $id('wfm-first').value  = '';
         $id('wfm-last').value   = '';
         $id('wfm-email').value  = '';
-        // Reset modal 2 title and submit button
+        // Reset modal 2 header
         $id('wfm-modal2').querySelector('.wfm-title').textContent = 'Get Started';
+        var stepLabel = $id('wfm-step-label');
+        if (stepLabel) { stepLabel.style.display = 'none'; stepLabel.textContent = ''; }
+        // Reset trial-specific form elements
+        formCard.classList.remove('wfm-trial-form');
+        var billingNotice = $id('wfm-trial-billing-notice');
+        if (billingNotice) billingNotice.style.display = 'none';
+        var trialTncRow = $id('wfm-trial-tnc-row');
+        if (trialTncRow) trialTncRow.style.display = 'none';
+        var trialTnc = $id('wfm-trial-tnc');
+        if (trialTnc) trialTnc.checked = false;
+        var trialHelp = $id('wfm-trial-help');
+        if (trialHelp) trialHelp.style.display = 'none';
+        var submitShield = $id('wfm-submit-shield');
+        if (submitShield) submitShield.style.display = 'none';
+        // Reset T&C and submit button to paid-flow defaults
         $id('wfm-tnc').checked        = false;
         $id('wfm-submit-btn').disabled = true;
         $id('wfm-submit-label').textContent = 'Proceed to Payment';
@@ -608,20 +635,78 @@
 
         if (state.trialMode) {
           var trialDays = parseInt(plan.trial_period_days, 10) || 0;
-          var trialAcctRow = state.additionalAccounts > 0
+
+          // Compute first renewal date
+          var rd = new Date();
+          rd.setDate(rd.getDate() + trialDays);
+          var renewalStr = (rd.getMonth() + 1).toString().padStart(2, '0') + '/'
+                         + rd.getDate().toString().padStart(2, '0') + '/'
+                         + rd.getFullYear();
+
+          var planAmount    = parseFloat(plan.amount).toFixed(2);
+          var durationLabel = (plan.plan_duration || 'Monthly') + ' Membership After Preview';
+          var periodSuffix  = plan.plan_duration === 'Annual'      ? '/year'
+                            : plan.plan_duration === 'Semiannual'  ? '/6 months'
+                            : '/month';
+          var trialAcctRow  = state.additionalAccounts > 0
             ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong style="color:var(--ok,#2e9e5b);">$0.00</strong></div>'
             : '';
+          var shieldSvg = '<svg class="wfm-plan-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4 5.5V11c0 5.55 3.56 10.74 8 12.2 4.44-1.46 8-6.65 8-12.2V5.5L12 2z"/></svg>';
+
           $id('wfm-summary-content').innerHTML =
-              '<div class="wfm-summary-row wfm-summary-row--plan"><span>' + plan.name + '</span><span class="wfm-summary-period">Trial</span></div>'
-            + '<div class="wfm-summary-row"><span>Trial Period</span><strong>' + trialDays + ' days</strong></div>'
+              '<div class="wfm-plan-header">'
+            +   '<div class="wfm-plan-icon">' + shieldSvg + '</div>'
+            +   '<div class="wfm-plan-header-info">'
+            +     '<div class="wfm-plan-header-name">' + plan.name + '</div>'
+            +     '<div class="wfm-preview-badge">Member Preview</div>'
+            +   '</div>'
+            + '</div>'
+            + '<div class="wfm-summary-divider"></div>'
+            + '<div class="wfm-summary-row"><span>Preview Period</span><strong>' + trialDays + ' days</strong></div>'
             + trialAcctRow
             + '<div class="wfm-summary-row"><span>Due Today</span><strong style="color:var(--ok,#2e9e5b);">$0.00</strong></div>'
-            + '<div class="wfm-summary-row wfm-summary-row--total"><span>Total Amount</span><strong style="color:var(--ok,#2e9e5b);">Free</strong></div>'
-            + '<div class="wfm-summary-total wfm-summary-total--trial">$0 <span class="wfm-summary-period">today</span></div>'
-            + '<p class="wfm-trial-notice">A valid card is required. You will not be charged until the trial ends. Cancel anytime before then.</p>'
-            + (features ? '<ul class="wfm-summary-features">' + features + '</ul>' : '');
-          $id('wfm-modal2').querySelector('.wfm-title').textContent = 'Start Your Trial';
-          $id('wfm-submit-label').textContent = 'Start ' + trialDays + '-Day Trial';
+            + '<div class="wfm-summary-row"><span>' + durationLabel + '</span><strong>$' + planAmount + '</strong></div>'
+            + '<div class="wfm-summary-row" style="border-bottom:none"><span>First Renewal Date <span class="wfm-info-icon" title="Date of first payment if you do not cancel.">ⓘ</span></span><strong>' + renewalStr + '</strong></div>'
+            + '<div class="wfm-summary-divider"></div>'
+            + '<p class="wfm-trial-notice"><em>A valid card is required. You will not be charged today. If you do not cancel before ' + renewalStr + ', your membership will automatically renew at $' + planAmount + periodSuffix + ' plus applicable taxes.</em></p>'
+            + '<div class="wfm-trial-callout">'
+            +   '<span class="wfm-trial-callout-icon">⚖️</span>'
+            +   '<span>If you request live legal support during the preview period, your paid membership will begin immediately.</span>'
+            + '</div>';
+
+          // Header — step indicator + title
+          var stepLabel = $id('wfm-step-label');
+          if (stepLabel) { stepLabel.textContent = 'STEP 3 OF 3'; stepLabel.style.display = ''; }
+          $id('wfm-modal2').querySelector('.wfm-title').textContent = 'Start Your ' + trialDays + '-Day Member Preview';
+
+          // Form card — enable 2-column name layout
+          var formCard = $id('wfm-modal2').querySelector('.wfm-form-card');
+          formCard.classList.add('wfm-trial-form');
+
+          // Billing notice
+          var billingNotice = $id('wfm-trial-billing-notice');
+          if (billingNotice) {
+            billingNotice.innerHTML = 'You will be charged $' + planAmount + periodSuffix + ' plus applicable taxes on ' + renewalStr + ' unless you cancel before then. You may cancel through <em>Account Settings &gt; Plan Details &gt; Manage Membership.</em>';
+            billingNotice.style.display = '';
+          }
+
+          // Second (trial-acknowledgment) checkbox
+          var trialTncRow   = $id('wfm-trial-tnc-row');
+          var trialTncLabel = $id('wfm-trial-tnc-label');
+          if (trialTncRow)   trialTncRow.style.display = '';
+          if (trialTncLabel) trialTncLabel.textContent = 'I understand that my ' + trialDays + '-Day Member Preview will automatically renew unless canceled before ' + renewalStr + '.';
+
+          // Shield icon + CTA label on submit button
+          var submitShield = $id('wfm-submit-shield');
+          if (submitShield) submitShield.style.display = '';
+          $id('wfm-submit-label').textContent = 'Agree & Start ' + trialDays + '-Day Member Preview';
+
+          // Help link
+          var trialHelp = $id('wfm-trial-help');
+          if (trialHelp) trialHelp.style.display = '';
+
+          // Both checkboxes must be checked to enable submit
+          bindTrialTnc();
         } else {
           var baseAmt  = parseFloat(plan.amount);
           var fee      = parseFloat(plan.additional_subaccount_fee) || 0;
@@ -672,6 +757,15 @@
         $id('wfm-tnc').addEventListener('change', function () {
           $id('wfm-submit-btn').disabled = !this.checked;
         });
+      }
+      function bindTrialTnc() {
+        function updateTrialBtn() {
+          var tnc      = $id('wfm-tnc');
+          var trialTnc = $id('wfm-trial-tnc');
+          $id('wfm-submit-btn').disabled = !(tnc && tnc.checked && trialTnc && trialTnc.checked);
+        }
+        $id('wfm-tnc').addEventListener('change', updateTrialBtn);
+        $id('wfm-trial-tnc').addEventListener('change', updateTrialBtn);
       }
       bindTnc();
 

@@ -2,6 +2,9 @@
       .wfm-overlay {
         position: fixed;
         inset: 0;
+        /* dvh shrinks as mobile browser chrome appears, keeping footer visible */
+        height: 100vh;
+        height: 100dvh;
         z-index: 100000;
         background: rgba(7, 13, 24, 0.97);
         backdrop-filter: blur(14px);
@@ -343,8 +346,9 @@
                     padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .wfm-footer-bar.wfm-bar-visible {
-        max-height: 120px;
+        max-height: calc(120px + env(safe-area-inset-bottom, 0px));
         padding: 16px 28px;
+        padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
       }
       .wfm-bar-info {
         display: flex;

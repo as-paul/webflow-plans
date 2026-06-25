@@ -157,7 +157,6 @@
                 <span id="wfm-trial-tnc-label"></span>
               </label>
               <button type="submit" class="wfm-submit-btn" id="wfm-submit-btn" disabled>
-                <svg id="wfm-submit-shield" width="15" height="17" viewBox="0 0 38 42" xmlns="http://www.w3.org/2000/svg" style="display:none;flex-shrink:0"><path transform="translate(38,0) scale(-1,1)" d="M 18 41 L 6 30 L 5 11 L 19 5 L 34 11 L 35 23 L 31 34 L 21 41 Z M 21 9 L 20 10 L 20 36 L 21 37 L 22 36 L 23 36 L 26 33 L 27 33 L 27 32 L 29 30 L 29 29 L 31 26 L 31 14 L 30 13 L 29 13 L 28 12 L 26 12 Z" fill="currentColor" fill-rule="evenodd"/></svg>
                 <span id="wfm-submit-label">Proceed to Payment</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
               </button>
@@ -256,8 +255,6 @@
         if (trialTnc) trialTnc.checked = false;
         var trialHelp = $id('wfm-trial-help');
         if (trialHelp) trialHelp.style.display = 'none';
-        var submitShield = $id('wfm-submit-shield');
-        if (submitShield) submitShield.style.display = 'none';
         // Reset T&C and submit button to paid-flow defaults
         $id('wfm-tnc').checked        = false;
         $id('wfm-submit-btn').disabled = true;
@@ -657,13 +654,8 @@
           var trialAcctRow  = state.additionalAccounts > 0
             ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong style="color:var(--ok,#2e9e5b);">$0.00</strong></div>'
             : '';
-          var shieldSvg = '<svg class="wfm-plan-icon-svg" viewBox="0 0 104 116" xmlns="http://www.w3.org/2000/svg">'
-            + '<path d="M 54 9 L 12 27 L 12 66 L 18 81 L 28 93 L 50 106 L 57 107 L 75 98 L 91 82 L 98 63 L 98 29 L 93 24 Z M 53 15 L 93 31 L 93 65 L 87 79 L 74 93 L 57 102 L 50 101 L 33 91 L 20 75 L 16 61 L 16 31 Z M 54 32 L 47 37 L 36 42 L 36 63 L 40 72 L 46 78 L 55 83 L 63 78 L 72 68 L 73 65 L 73 42 L 63 38 Z M 54 36 L 70 44 L 68 47 L 56 41 L 56 46 L 54 47 L 52 41 L 42 46 L 42 62 L 46 69 L 53 75 L 58 74 L 63 70 L 65 71 L 55 79 L 45 73 L 39 63 L 39 44 Z M 70 49 L 71 50 L 71 59 L 70 60 L 70 64 L 69 65 L 68 68 L 67 69 L 66 69 L 65 68 L 65 67 L 67 64 L 67 63 L 66 62 L 66 61 L 67 60 L 67 50 L 68 49 Z M 47 54 L 48 53 L 49 53 L 50 54 L 50 56 L 49 57 L 48 57 L 47 56 Z M 53 68 L 54 67 L 55 67 L 56 68 L 56 69 L 55 70 L 54 70 L 53 69 Z M 46 66 L 47 65 L 48 65 L 49 66 L 49 67 L 48 68 L 47 68 L 46 67 Z M 61 63 L 62 62 L 63 62 L 64 63 L 64 64 L 63 65 L 62 65 L 61 64 Z M 61 56 L 62 55 L 63 55 L 64 56 L 64 57 L 63 58 L 62 58 L 61 57 Z" fill="#f5a400" fill-rule="evenodd"/>'
-            + '</svg>';
-
           $id('wfm-summary-content').innerHTML =
               '<div class="wfm-plan-header">'
-            +   '<div class="wfm-plan-icon">' + shieldSvg + '</div>'
             +   '<div class="wfm-plan-header-info">'
             +     '<div class="wfm-plan-header-name">' + plan.name + '</div>'
             +     '<div class="wfm-preview-badge">Member Preview</div>'
@@ -706,10 +698,7 @@
           if (trialTncRow)   trialTncRow.style.display = '';
           if (trialTncLabel) trialTncLabel.textContent = 'I understand that my ' + trialDays + '-Day Member Preview will automatically renew unless canceled before ' + renewalStr + '.';
 
-          // Shield icon + CTA label on submit button
-          var submitShield = $id('wfm-submit-shield');
-          if (submitShield) submitShield.style.display = '';
-          $id('wfm-submit-label').textContent = 'Agree & Start ' + trialDays + '-Day Member Preview';
+          $id('wfm-submit-label').textContent = 'Start ' + trialDays + '-Day Member Preview';
 
           // Help link
           var trialHelp = $id('wfm-trial-help');

@@ -647,7 +647,7 @@
                          + rd.getFullYear();
 
           var planAmount    = parseFloat(plan.amount).toFixed(2);
-          var durationLabel = (plan.plan_duration || 'Monthly') + ' Membership After Preview';
+          var durationLabel = (plan.plan_duration || 'Monthly') + ' Membership After Trial Ends';
           var periodSuffix  = plan.plan_duration === 'Annual'      ? '/year'
                             : plan.plan_duration === 'Semiannual'  ? '/6 months'
                             : '/month';
@@ -658,7 +658,7 @@
               '<div class="wfm-plan-header">'
             +   '<div class="wfm-plan-header-info">'
             +     '<div class="wfm-plan-header-name">' + plan.name + '</div>'
-            +     '<div class="wfm-preview-badge">Member Preview</div>'
+            +     '<div class="wfm-preview-badge">Limited Trial</div>'
             +   '</div>'
             + '</div>'
             + '<div class="wfm-summary-divider"></div>'
@@ -679,7 +679,7 @@
           // Header — step indicator + title
           var stepLabel = $id('wfm-step-label');
           if (stepLabel) { stepLabel.textContent = 'STEP 3 OF 3'; stepLabel.style.display = ''; }
-          $id('wfm-modal2').querySelector('.wfm-title').textContent = 'Start Your ' + trialDays + '-Day Member Preview';
+          $id('wfm-modal2').querySelector('.wfm-title').textContent = 'Start Your ' + trialDays + '-Day Limited Trial';
 
           // Form card — enable 2-column name layout
           var formCard = $id('wfm-modal2').querySelector('.wfm-form-card');
@@ -696,9 +696,9 @@
           var trialTncRow   = $id('wfm-trial-tnc-row');
           var trialTncLabel = $id('wfm-trial-tnc-label');
           if (trialTncRow)   trialTncRow.style.display = '';
-          if (trialTncLabel) trialTncLabel.textContent = 'I understand that my ' + trialDays + '-Day Member Preview will automatically renew unless canceled before ' + renewalStr + '.';
+          if (trialTncLabel) trialTncLabel.textContent = 'I understand that my ' + trialDays + '-Day Limited Trial will automatically renew unless canceled before ' + renewalStr + '.';
 
-          $id('wfm-submit-label').textContent = 'Start ' + trialDays + '-Day Member Preview';
+          $id('wfm-submit-label').textContent = 'Start ' + trialDays + '-Day Limited Trial';
 
           // Help link
           var trialHelp = $id('wfm-trial-help');

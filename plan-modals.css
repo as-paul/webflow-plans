@@ -398,6 +398,26 @@
         transform: translateY(-2px);
       }
 
+      /* On narrow screens, stack the footer contents and make the button
+         full-width so it never wraps and gets clipped by the bar's
+         overflow:hidden / max-height (which exists only for the slide-in). */
+      @media (max-width: 680px) {
+        .wfm-footer-bar {
+          flex-direction: column;
+          align-items: stretch;
+          flex-wrap: nowrap;
+          gap: 12px;
+        }
+        .wfm-footer-bar.wfm-bar-visible {
+          /* taller cap leaves room for the stacked button + safe area */
+          max-height: calc(240px + env(safe-area-inset-bottom, 0px));
+        }
+        .wfm-continue-btn {
+          width: 100%;
+          justify-content: center;
+        }
+      }
+
       /* ---- modal 2: account form ---- */
       .wfm-two-col {
         display: grid;

@@ -646,13 +646,19 @@
                          + rd.getDate().toString().padStart(2, '0') + '/'
                          + rd.getFullYear();
 
-          var planAmount    = parseFloat(plan.amount).toFixed(2);
+          // Post-trial renewal total = base plan amount + recurring per-account
+          // fee for any additional accounts. Additional accounts are free during
+          // the trial but are billed once the membership converts.
+          var baseAmount    = parseFloat(plan.amount) || 0;
+          var acctFee       = parseFloat(plan.additional_subaccount_fee) || 0;
+          var postTrialAmt  = baseAmount + state.additionalAccounts * acctFee;
+          var planAmount    = postTrialAmt.toFixed(2);
           var durationLabel = (plan.plan_duration || 'Monthly') + ' Membership After Trial Ends';
           var periodSuffix  = plan.plan_duration === 'Annual'      ? '/year'
                             : plan.plan_duration === 'Semiannual'  ? '/6 months'
                             : '/month';
           var trialAcctRow  = state.additionalAccounts > 0
-            ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong style="color:var(--ok,#2e9e5b);">$0.00</strong></div>'
+            ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong style="color:var(--ok,#2e9e5b);">$0.00 today</strong></div>'
             : '';
           $id('wfm-summary-content').innerHTML =
               '<div class="wfm-plan-header">'

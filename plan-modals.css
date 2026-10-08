@@ -920,17 +920,17 @@
       }
 
       /* ---- Trial form card layout ---- */
-      .wfm-form-card.wfm-trial-form .wfm-name-row {
+      .wfm-name-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 14px;
         margin-bottom: 16px;
       }
-      .wfm-form-card.wfm-trial-form .wfm-name-row .wfm-field {
+      .wfm-name-row .wfm-field {
         margin-bottom: 0;
       }
       @media (max-width: 480px) {
-        .wfm-form-card.wfm-trial-form .wfm-name-row {
+        .wfm-name-row {
           grid-template-columns: 1fr;
         }
       }
@@ -952,3 +952,123 @@
         text-underline-offset: 3px;
       }
 
+
+      /* ===== ASI 2.0 checkout: account → email code → card ===== */
+      .wfm-panel[hidden] {
+        display: none !important;
+      }
+      .wfm-panel {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+      .wfm-panel-sub {
+        font-size: 13.5px;
+        color: rgba(255, 255, 255, 0.6);
+        line-height: 1.5;
+        margin: -8px 0 16px;
+      }
+      .wfm-hint {
+        font-size: 12.5px;
+        color: rgba(255, 255, 255, 0.5);
+        margin: 12px 0 0;
+        text-align: center;
+      }
+      .wfm-divider {
+        border: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        margin: 16px 0 12px;
+      }
+
+      /* one box per digit; the first box takes an autofilled or pasted code */
+      .wfm-otp-row {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 4px;
+      }
+      .wfm-otp-box {
+        width: 52px;
+        height: 62px;
+        text-align: center;
+        font-size: 24px;
+        font-weight: 700;
+        font-family: inherit;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.07);
+        border: 1.5px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        outline: none;
+        caret-color: var(--gold, #c4850a);
+        transition: border-color 0.18s, background 0.18s;
+      }
+      .wfm-otp-box:focus {
+        border-color: var(--gold, #c4850a);
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .wfm-otp-box.filled {
+        border-color: rgba(232, 160, 32, 0.6);
+      }
+      .wfm-otp-box:disabled {
+        opacity: 0.6;
+      }
+      @media (max-width: 400px) {
+        .wfm-otp-row { gap: 8px; }
+        .wfm-otp-box { width: 44px; height: 54px; font-size: 20px; }
+      }
+
+      .wfm-resend {
+        text-align: center;
+        font-size: 13px;
+        margin-bottom: 16px;
+        min-height: 20px;
+      }
+      .wfm-resend-muted {
+        color: rgba(255, 255, 255, 0.45);
+      }
+      .wfm-link-btn {
+        background: none;
+        border: none;
+        padding: 0;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--gold-hi, #e8a020);
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      .wfm-link-btn:hover {
+        color: #fff;
+      }
+
+      /* email shown as text at checkout; a different email means going back */
+      .wfm-readonly {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1.5px dashed rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        padding: 10px 14px;
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 14px;
+        word-break: break-all;
+      }
+      .wfm-readonly .wfm-link-btn {
+        flex-shrink: 0;
+      }
+
+      .wfm-success-note {
+        font-size: 13px;
+        color: #ffb84d;
+        background: rgba(232, 160, 32, 0.12);
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin: 0;
+        max-width: 320px;
+        line-height: 1.5;
+      }
+      .wfm-success-note[hidden] {
+        display: none;
+      }

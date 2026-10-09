@@ -1,0 +1,1273 @@
+(function () {
+  // ── Configuration ──────────────────────────────────────────────
+  // The only line that changes at the cutover.
+  var API = 'https://gateway-dev.attorneyshield.io/query';
+  // var API = 'https://gateway.attorneyshield.io/query';
+
+  var COUNTRY  = 'US';
+  var CURRENCY = 'USD';
+
+  // Flip to true before the final data copy so the popup stops taking
+  // orders, then back to false (with the prod API) once prod is open.
+  var SALES_PAUSED = false;
+  var SALES_PAUSED_MESSAGE = 'Plans are being updated, please check back soon.';
+
+  // Trial summary callout ("If you request live legal support during the
+  // preview period, your paid membership will begin immediately."). Hidden
+  // since the 2.0 cutover: trial members can use the live service without
+  // being converted. Flip to true to show it again.
+  var SHOW_TRIAL_CONVERSION_NOTICE = false;
+
+  // Billing tabs, in display order. A tab only shows when some plan has
+  // an active USD price for it.
+  var PERIODS = [
+    { interval: 'month', count: 1, label: 'Monthly',    suffix: '/month' },
+    { interval: 'month', count: 6, label: 'Semiannual', suffix: '/6 months' },
+    { interval: 'year',  count: 1, label: 'Annual',     suffix: '/year' },
+  ];
+
+  var OTP_LENGTH_FALLBACK   = 4;
+  var RESEND_AFTER_FALLBACK = 90;
+  var PAST_DUE_POLL_MS      = 5000;
+  var PAST_DUE_POLL_MAX     = 12;
+
+  // ── GraphQL documents ──────────────────────────────────────────
+  var GQL = {
+    PRODUCTS:
+      'query StorefrontProducts($country: String) {' +
+      '  storefrontProducts(countryISO2: $country) {' +
+      '    id name description isActive isPublic entitlementsJSON' +
+      '    prices { id nickname currency unitAmountCents billingInterval intervalCount isActive }' +
+      '  }' +
+      '}',
+    SEAT_PRODUCTS:
+      'query SeatProducts {' +
+      '  storefrontSeatProducts {' +
+      '    id isActive kind parentProductId' +
+      '    prices { id currency unitAmountCents billingInterval intervalCount isActive }' +
+      '  }' +
+      '}',
+    VALIDATE_PROMO:
+      'query ValidatePromoCode($i: ValidatePromoCodeInput!) {' +
+      '  validatePromoCode(input: $i) {' +
+      '    valid reason code subtotalCents discountCents freeMonths totalCents currency' +
+      '  }' +
+      '}',
+    STRIPE_KEY:
+      'query StripeKey { stripePublishableKey }',
+    ELIGIBILITY:
+      'query PurchaseEligibility($email: String!) {' +
+      '  purchaseEligibility(email: $email) { eligible message }' +
+      '}',
+    REQUEST_CODE:
+      'mutation RequestCode($email: String!) {' +
+      '  requestLoginOtp(email: $email, channel: EMAIL, purpose: CHECKOUT) {' +
+      '    sent maskedEmail codeLength expiresInSeconds resendAfterSeconds' +
+      '  }' +
+      '}',
+    VERIFY_CODE:
+      'mutation VerifyCode($email: String!, $code: String!, $country: String, $firstName: String, $lastName: String) {' +
+      '  verifyLoginOtp(email: $email, code: $code, origin: WEB, countryISO2: $country, firstName: $firstName, lastName: $lastName) {' +
+      '    userID' +
+      '  }' +
+      '}',
+    PUBLIC_CHECKOUT:
+      'mutation PublicCheckout($i: PublicCheckoutInput!) {' +
+      '  publicCheckout(input: $i) {' +
+      '    status alreadySubscribed message promoRefusedReason promoDiscountCents promoFreeMonths' +
+      '  }' +
+      '}',
+    SUB_STATUS:
+      'query PublicSubStatus($email: String!) {' +
+      '  publicSubscriptionStatus(email: $email) { hasActivePlan }' +
+      '}',
+  };
+
+  // One helper sends every call. 2.0 reports problems in an errors list,
+  // and the first message is what we show or match on.
+  function gql(query, variables) {
+    return fetch(API, {
+      method: 'POST',
+      credentials: 'omit',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: query, variables: variables || {} }),
+    })
+      .then(function (res) { return res.json().catch(function () { return null; }); },
+            function () { return null; })
+      .then(function (body) {
+        if (!body) throw new Error('Network error. Please check your connection and try again.');
+        if (body.errors && body.errors.length) throw new Error(body.errors[0].message || 'Something went wrong. Please try again.');
+        return body.data || {};
+      });
+  }
+
+  // Server wording passes through untouched, except the two code
+  // messages the plan asks us to reword for members.
+  function friendlyError(err) {
+    var raw = (err && err.message) ? String(err.message).trim() : '';
+    var lower = raw.toLowerCase();
+    if (lower.indexOf('invalid or expired code') !== -1) {
+      return 'That code is wrong or has expired. Check the email, or send a new code.';
+    }
+    if (lower.indexOf('too many codes requested') !== -1) {
+      return 'Too many codes have been sent. Wait a few minutes, then try again.';
+    }
+    return raw || 'Something went wrong. Please try again.';
+  }
+
+  // ── State ──────────────────────────────────────────────────────
+  var state = {
+    plans: null,            // { Monthly: [plan], Semiannual: [plan], Annual: [plan] }
+    activeDuration: null,
+    planFilter: null,       // 'Family' | 'Individual' | null (from the landing buttons)
+    selectedPlan: null,
+    promoCode: '',          // code typed and applied
+    promoData: null,        // last valid validatePromoCode result, or null
+    additionalAccounts: 0,
+    trialMode: false,
+    cameFromPicker: false,
+
+    step: 'account',        // 'account' | 'code' | 'payment' | 'success'
+    buyer: { firstName: '', lastName: '', email: '' },
+    verifiedEmail: null,    // email that passed the code in this popup session
+    otp: { code: '', codeLength: OTP_LENGTH_FALLBACK, maskedEmail: '', resendAfter: RESEND_AFTER_FALLBACK },
+    resendIn: 0,
+    resendTimer: null,
+    busy: false,
+  };
+
+  // ── Helpers ────────────────────────────────────────────────────
+  function $id(id) { return document.getElementById(id); }
+
+  // Every element the script wires up. If the embed was truncated or an
+  // old copy of the markup is on the page, say which IDs are missing
+  // instead of failing silently half-way through binding.
+  var REQUIRED_IDS = [
+    'wfm-modal1', 'wfm-modal1-hdr', 'wfm-acct-hdr-back', 'wfm-tabs', 'wfm-plan-list',
+    'wfm-promo-input', 'wfm-promo-msg', 'wfm-acct-picker', 'wfm-acct-sub', 'wfm-acct-count',
+    'wfm-acct-total', 'wfm-footer-bar', 'wfm-bar-name', 'wfm-bar-price',
+    'wfm-modal2', 'wfm-modal2-back', 'wfm-step-label', 'wfm-modal2-title', 'wfm-summary-content',
+    'wfm-panel-account', 'wfm-account-form', 'wfm-first', 'wfm-last', 'wfm-email',
+    'wfm-account-btn', 'wfm-account-label', 'wfm-account-error',
+    'wfm-panel-code', 'wfm-code-sub', 'wfm-code-email', 'wfm-code-form', 'wfm-otp-row', 'wfm-resend',
+    'wfm-code-btn', 'wfm-code-label', 'wfm-code-error',
+    'wfm-panel-payment', 'wfm-payment-heading', 'wfm-payment-form', 'wfm-pay-first', 'wfm-pay-last', 'wfm-payment-email',
+    'wfm-card-element', 'wfm-card-errors', 'wfm-trial-billing-notice', 'wfm-tnc',
+    'wfm-trial-tnc-row', 'wfm-trial-tnc', 'wfm-trial-tnc-label', 'wfm-submit-btn',
+    'wfm-submit-label', 'wfm-error', 'wfm-trial-help',
+    'wfm-panel-success', 'wfm-success-title', 'wfm-success-msg', 'wfm-success-note',
+  ];
+  var missing = REQUIRED_IDS.filter(function (id) { return !$id(id); });
+  if (missing.length) {
+    console.error('[plans popup] Missing elements in the page markup: ' + missing.join(', ')
+      + '. The modal HTML embed is incomplete or out of date.');
+    return;
+  }
+  var dupes = REQUIRED_IDS.filter(function (id) { return document.querySelectorAll('#' + id).length > 1; });
+  if (dupes.length) {
+    console.error('[plans popup] Duplicate element IDs on the page: ' + dupes.join(', ')
+      + '. An older copy of the modal markup is probably still on the page.');
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function checkSvg() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  }
+
+  function money(cents) {
+    return '$' + (Math.round(cents || 0) / 100).toFixed(2);
+  }
+  // "$16" when whole dollars, "$16.50" otherwise — for plan cards.
+  function moneyShort(cents) {
+    var d = Math.round(cents || 0) / 100;
+    return '$' + (d % 1 === 0 ? String(d) : d.toFixed(2));
+  }
+
+  function isValidEmail(s) {
+    var v = (s || '').trim();
+    return v.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+  }
+
+  function showError(el, msg) {
+    el.textContent = msg;
+    el.classList.add('wfm-visible');
+  }
+  function clearError(el) {
+    el.textContent = '';
+    el.classList.remove('wfm-visible');
+  }
+
+  // ── Catalog: 2.0 products → the plan shape the popup renders ───
+  function entitlements(product) {
+    try { return JSON.parse(product.entitlementsJSON || '{}') || {}; } catch (e) { return {}; }
+  }
+  function isFamily(ent) {
+    return (parseInt(ent.max_additional_seats, 10) || 0) > 0
+        || (parseInt(ent.included_subaccounts, 10) || 0) > 0;
+  }
+  function periodFor(price) {
+    return PERIODS.find(function (p) {
+      return p.interval === price.billingInterval && p.count === price.intervalCount;
+    }) || null;
+  }
+  function usdPrices(product) {
+    return (product.prices || []).filter(function (p) {
+      return p.isActive && p.currency === CURRENCY;
+    });
+  }
+  function seatPriceFor(seatProducts, product, price) {
+    var addon = (seatProducts || []).find(function (s) {
+      return s.isActive && s.kind === 'seat_addon' && s.parentProductId === product.id;
+    });
+    if (!addon) return null;
+    return (addon.prices || []).find(function (p) {
+      return p.isActive && p.currency === price.currency
+        && p.billingInterval === price.billingInterval && p.intervalCount === price.intervalCount;
+    }) || null;
+  }
+
+  function buildCatalog(products, seatProducts) {
+    var byPeriod = {};
+    (products || []).forEach(function (product) {
+      if (product.isActive === false || product.isPublic === false) return;
+      var ent    = entitlements(product);
+      var family = isFamily(ent);
+      usdPrices(product).forEach(function (price) {
+        var period = periodFor(price);
+        if (!period) return;
+        var seatPrice = seatPriceFor(seatProducts, product, price);
+        var maxSeats  = parseInt(ent.max_additional_seats, 10) || 0;
+        var plan = {
+          id:                   price.id,          // one card per (product, price)
+          productId:            product.id,
+          priceId:              price.id,
+          name:                 product.name || '',
+          description:          product.description || '',
+          amountCents:          price.unitAmountCents || 0,
+          plan_duration:        period.label,
+          periodSuffix:         period.suffix,
+          features:             Array.isArray(ent.benefits) ? ent.benefits : [],
+          trial_period_days:    parseInt(ent.trial_period_days, 10) || 0,
+          included_subaccounts: parseInt(ent.included_subaccounts, 10) || 0,
+          included_seats:       parseInt(ent.included_seats, 10) || 1,
+          isFamily:             family,
+          // The stepper only makes sense with a seat price for this period.
+          max_additional_seats: seatPrice ? maxSeats : 0,
+          seatPriceId:          seatPrice ? seatPrice.id : null,
+          seatCents:            seatPrice ? (seatPrice.unitAmountCents || 0) : 0,
+        };
+        (byPeriod[period.label] = byPeriod[period.label] || []).push(plan);
+      });
+    });
+    var ordered = {};
+    PERIODS.forEach(function (p) {
+      var list = byPeriod[p.label];
+      if (!list || !list.length) return;
+      list.sort(function (a, b) {               // family plans first
+        if (a.isFamily !== b.isFamily) return a.isFamily ? -1 : 1;
+        return a.amountCents - b.amountCents;
+      });
+      ordered[p.label] = list;
+    });
+    return ordered;
+  }
+
+  // Everything money-related is derived from state, never stored.
+  function totals() {
+    var plan      = state.selectedPlan;
+    var seatCents = state.additionalAccounts * plan.seatCents;
+    var subtotal  = plan.amountCents + seatCents;
+    var promo     = (!state.trialMode && state.promoData) ? state.promoData : null;
+    return {
+      baseCents:      plan.amountCents,
+      seatCents:      seatCents,
+      subtotalCents:  subtotal,
+      discountCents:  promo ? (promo.discountCents || 0) : 0,
+      freeMonths:     promo ? (promo.freeMonths || 0) : 0,
+      totalCents:     promo ? promo.totalCents : subtotal,
+      dueTodayCents:  state.trialMode ? 0 : (promo ? promo.totalCents : subtotal),
+      renewalCents:   subtotal,
+    };
+  }
+  function discountText(t) {
+    if (t.freeMonths > 0) return t.freeMonths + (t.freeMonths === 1 ? ' month free' : ' months free');
+    if (t.discountCents > 0) return '-' + money(t.discountCents);
+    return '';
+  }
+
+  // ── Open / close ───────────────────────────────────────────────
+  window.wfmOpen = function (planNameHint) {
+    // Reset per-session state so a fresh filter is applied each time
+    state.planFilter = planNameHint || null;
+    state.activeDuration = null;
+    state.selectedPlan = null;
+    state.promoCode = '';
+    state.promoData = null;
+    state.additionalAccounts = 0;
+    state.trialMode = false;
+    state.cameFromPicker = false;
+    resetBuyer();
+
+    document.body.style.overflow = 'hidden';
+    $id('wfm-promo-input').value = '';
+    $id('wfm-promo-msg').innerHTML = '';
+    $id('wfm-modal1').classList.remove('wfm-trial-mode');
+    wfmHideAccountsPicker();
+    hideFooterBar();
+
+    $id('wfm-modal1').classList.add('wfm-open');
+
+    if (SALES_PAUSED) {
+      $id('wfm-tabs').innerHTML = '';
+      $id('wfm-plan-list').innerHTML = '<div class="wfm-loading">' + esc(SALES_PAUSED_MESSAGE) + '</div>';
+      document.querySelector('.wfm-promo-row').style.display = 'none';
+      return;
+    }
+    document.querySelector('.wfm-promo-row').style.display = '';
+
+    if (!state.plans) {
+      loadPlans();
+    } else {
+      renderTabs();
+      renderCards();
+    }
+  };
+
+  window.wfmClose = function () {
+    resetStep2();
+    resetBuyer();
+    $id('wfm-modal1').classList.remove('wfm-open');
+    $id('wfm-modal2').classList.remove('wfm-open');
+    document.body.style.overflow = '';
+  };
+
+  window.wfmBackToPlans = function () {
+    var fromPicker = state.cameFromPicker;
+    state.cameFromPicker = false;
+    resetStep2();
+    $id('wfm-modal2').classList.remove('wfm-open');
+    $id('wfm-modal1').classList.add('wfm-open');
+    if (state.trialMode) $id('wfm-modal1').classList.add('wfm-trial-mode');
+    if (fromPicker) {
+      wfmShowAccountsPicker(true); // reopens picker with count preserved
+    } else {
+      showFooterBar();
+    }
+  };
+
+  // Close on backdrop click
+  ['wfm-modal1', 'wfm-modal2'].forEach(function (id) {
+    $id(id).addEventListener('click', function (e) {
+      if (e.target === this) wfmClose();
+    });
+  });
+
+  // Close on Escape
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') wfmClose();
+  });
+
+  // ── Load plans from API ────────────────────────────────────────
+  function loadPlans() {
+    $id('wfm-plan-list').innerHTML = '<div class="wfm-loading"><div class="wfm-spinner"></div>Loading plans…</div>';
+    Promise.all([
+      gql(GQL.PRODUCTS, { country: COUNTRY }),
+      gql(GQL.SEAT_PRODUCTS),
+    ])
+      .then(function (res) {
+        var catalog = buildCatalog(res[0].storefrontProducts, res[1].storefrontSeatProducts);
+        if (!Object.keys(catalog).length) {
+          $id('wfm-plan-list').innerHTML = '<div class="wfm-loading">No plans are available right now. Please try again later.</div>';
+          return;
+        }
+        state.plans = catalog;
+        renderTabs();
+        renderCards();
+      })
+      .catch(function (err) {
+        $id('wfm-plan-list').innerHTML = '<div class="wfm-loading">' + esc(friendlyError(err)) + '</div>';
+      });
+  }
+
+  // ── Render billing tabs ────────────────────────────────────────
+  function renderTabs() {
+    var durations = Object.keys(state.plans);
+    if (!state.activeDuration || !state.plans[state.activeDuration]) {
+      state.activeDuration = durations[0];
+    }
+    $id('wfm-tabs').innerHTML = durations.map(function (d) {
+      var active = d === state.activeDuration ? ' wfm-tab-active' : '';
+      return '<button class="wfm-tab' + active + '" onclick="wfmSelectDuration(\'' + esc(d) + '\')">' + esc(d) + '</button>';
+    }).join('');
+  }
+
+  window.wfmSelectDuration = function (duration) {
+    state.activeDuration = duration;
+    state.selectedPlan = null;
+    state.promoData = null;        // re-checked once a plan is picked again
+    $id('wfm-promo-msg').innerHTML = '';
+    renderTabs();
+    renderCards();
+    hideFooterBar();
+  };
+
+  // ── Render plan cards ──────────────────────────────────────────
+  function visiblePlans() {
+    var plans = (state.plans[state.activeDuration] || []);
+    // Filter by what the plan is (family / individual), never by name:
+    // names change with the period and staff can rename them.
+    if (state.planFilter) {
+      var wantFamily = /family/i.test(state.planFilter);
+      plans = plans.filter(function (p) { return p.isFamily === wantFamily; });
+    }
+    // In trial mode only show plans that actually offer a trial period
+    if (state.trialMode) {
+      plans = plans.filter(function (p) { return p.trial_period_days > 0; });
+    }
+    return plans;
+  }
+
+  function renderCards() {
+    var plans = visiblePlans();
+    if (!plans.length) {
+      $id('wfm-plan-list').innerHTML =
+        '<div class="wfm-loading">No plans available for this billing period.</div>';
+      return;
+    }
+
+    $id('wfm-plan-list').innerHTML = plans.map(function (plan, idx) {
+      var features = plan.features.map(function (f) {
+        return '<li>' + checkSvg() + '<span>' + esc(f) + '</span></li>';
+      }).join('');
+      var badge = plan.isFamily ? '<div class="wfm-plan-badge">Best for families</div>' : '';
+      return '<div class="wfm-plan-card" id="wfm-card-' + esc(plan.id) + '" data-idx="' + idx + '">'
+        + badge
+        + '<div class="wfm-plan-name">' + esc(plan.name) + '</div>'
+        + '<div class="wfm-plan-desc">' + esc(plan.description) + '</div>'
+        + '<div class="wfm-plan-price"><span class="wfm-plan-amt">' + moneyShort(plan.amountCents) + '</span><span class="wfm-plan-per">/' + esc(plan.plan_duration) + '</span></div>'
+        + (features ? '<ul class="wfm-plan-features">' + features + '</ul>' : '')
+        + '<button class="wfm-select-btn" onclick="wfmConfirmPlan(\'' + esc(plan.id) + '\')">Select Plan</button>'
+        + '</div>';
+    }).join('');
+
+    // Auto-select the single visible card
+    if (plans.length === 1) {
+      wfmSelectPlan(plans[0].id);
+    }
+  }
+
+  window.wfmSelectPlan = function (planId) {
+    var plans = (state.plans[state.activeDuration] || []);
+    var plan = plans.find(function (p) { return p.id === planId; });
+    if (!plan) return;
+    var changed = !state.selectedPlan || state.selectedPlan.id !== plan.id;
+    state.selectedPlan = plan;
+    if (state.additionalAccounts > plan.max_additional_seats) {
+      state.additionalAccounts = plan.max_additional_seats;
+    }
+
+    // Update card highlights
+    document.querySelectorAll('.wfm-plan-card').forEach(function (c) {
+      c.classList.remove('wfm-selected');
+    });
+    var card = $id('wfm-card-' + planId);
+    if (card) card.classList.add('wfm-selected');
+
+    // A promo code is checked again whenever the plan changes.
+    if (changed && state.promoCode) revalidatePromo();
+    // Footer bar stays hidden until the user clicks "Select Plan"
+  };
+
+  // Called only by the "Select Plan" button — shows the footer bar
+  window.wfmConfirmPlan = function (planId) {
+    wfmSelectPlan(planId);
+    showFooterBar();
+  };
+
+  // ── Footer bar ─────────────────────────────────────────────────
+  function showFooterBar() {
+    if (!state.selectedPlan) return;
+    var plan = state.selectedPlan;
+    if (state.trialMode) {
+      $id('wfm-bar-name').textContent = plan.name + ' — ' + plan.trial_period_days + '-Day Trial';
+      $id('wfm-bar-price').textContent = '$0 due today';
+    } else {
+      var t = totals();
+      var d = discountText(t);
+      $id('wfm-bar-name').textContent = plan.name + ' — ' + plan.plan_duration;
+      $id('wfm-bar-price').innerHTML = money(t.dueTodayCents) + ' due today '
+        + (d ? '<span class="wfm-bar-promo">' + esc(d) + '</span>' : '');
+    }
+    $id('wfm-footer-bar').classList.add('wfm-bar-visible');
+  }
+
+  function hideFooterBar() {
+    $id('wfm-footer-bar').classList.remove('wfm-bar-visible');
+  }
+
+  function refreshPriceDisplays() {
+    if ($id('wfm-footer-bar').classList.contains('wfm-bar-visible')) showFooterBar();
+    if ($id('wfm-acct-picker').style.display !== 'none') updateAcctTotal();
+  }
+
+  // ── Promo code ─────────────────────────────────────────────────
+  function promoItems() {
+    var plan  = state.selectedPlan;
+    var items = [{ priceId: plan.priceId, quantity: 1 }];
+    if (state.additionalAccounts > 0 && plan.seatPriceId) {
+      items.push({ priceId: plan.seatPriceId, quantity: state.additionalAccounts });
+    }
+    return items;
+  }
+
+  function validatePromo(code) {
+    return gql(GQL.VALIDATE_PROMO, {
+      i: { code: code, items: promoItems(), isTrial: !!state.trialMode },
+    }).then(function (d) { return d.validatePromoCode || { valid: false, reason: 'Could not validate promo code.' }; });
+  }
+
+  function renderPromoResult(r) {
+    var msgEl = $id('wfm-promo-msg');
+    if (r.valid) {
+      var t = totals();
+      var d = discountText(t);
+      msgEl.innerHTML = '<span class="wfm-promo-ok">Code applied' + (d ? ': ' + esc(d) : '') + '. New total ' + esc(money(t.totalCents)) + '.</span>';
+    } else {
+      msgEl.innerHTML = '<span class="wfm-promo-err">' + esc(r.reason || 'That code can’t be used for this purchase.') + '</span>';
+    }
+  }
+
+  window.wfmApplyPromo = function () {
+    var code  = $id('wfm-promo-input').value.trim();
+    var msgEl = $id('wfm-promo-msg');
+    if (!code) { msgEl.innerHTML = '<span class="wfm-promo-err">Enter a promo code.</span>'; return; }
+    if (!state.selectedPlan) { msgEl.innerHTML = '<span class="wfm-promo-err">Select a plan first.</span>'; return; }
+
+    msgEl.innerHTML = '<div class="wfm-spinner" style="display:inline-block;width:14px;height:14px;"></div>';
+    validatePromo(code)
+      .then(function (r) {
+        state.promoCode = r.valid ? code : '';
+        state.promoData = r.valid ? r : null;
+        renderPromoResult(r);
+        refreshPriceDisplays();
+      })
+      .catch(function (err) {
+        state.promoCode = '';
+        state.promoData = null;
+        msgEl.innerHTML = '<span class="wfm-promo-err">' + esc(friendlyError(err)) + '</span>';
+        refreshPriceDisplays();
+      });
+  };
+
+  // Re-check the applied code after the plan, period or seat count
+  // changes. Checking reserves nothing, so it is safe to repeat.
+  function revalidatePromo() {
+    var code = state.promoCode;
+    if (!code || !state.selectedPlan) return;
+    validatePromo(code)
+      .then(function (r) {
+        if (state.promoCode !== code) return;   // superseded
+        state.promoData = r.valid ? r : null;
+        if (!r.valid) state.promoCode = '';
+        renderPromoResult(r);
+        refreshPriceDisplays();
+      })
+      .catch(function () {
+        state.promoData = null;
+        refreshPriceDisplays();
+      });
+  }
+
+  // ── Stripe setup ──────────────────────────────────────────────
+  var stripe = null;
+  var cardElement = null;
+
+  // Load the key from 2.0 when the page loads: uat and prod use different keys.
+  gql(GQL.STRIPE_KEY)
+    .then(function (data) {
+      var pk = data.stripePublishableKey;
+      if (!pk || typeof Stripe !== 'function') return;
+      stripe = Stripe(pk);
+      var elements = stripe.elements({
+        appearance: { theme: 'night', variables: { fontFamily: 'Inter, sans-serif' } },
+      });
+      cardElement = elements.create('card', {
+        hidePostalCode: true,
+        disableLink: true,
+        style: {
+          base: {
+            color: '#ffffff',
+            fontFamily: 'Inter, sans-serif',
+            fontSize: '15px',
+            '::placeholder': { color: 'rgba(255,255,255,0.38)' },
+          },
+          invalid: { color: '#e05c5c' },
+        },
+      });
+      cardElement.on('change', function (event) {
+        $id('wfm-card-errors').textContent = event.error ? event.error.message : '';
+      });
+      cardElement.on('focus', function () {
+        $id('wfm-card-element').classList.add('wfm-card-element--focus');
+      });
+      cardElement.on('blur', function () {
+        $id('wfm-card-element').classList.remove('wfm-card-element--focus');
+      });
+      if (state.step === 'payment' && $id('wfm-modal2').classList.contains('wfm-open')) mountCard();
+    })
+    .catch(function () { /* card entry stays unavailable; the payment step says so */ });
+
+  function mountCard() {
+    if (!cardElement) return;
+    var container = $id('wfm-card-element');
+    if (container && !container.hasChildNodes()) cardElement.mount('#wfm-card-element');
+  }
+
+  // ── Additional accounts picker ─────────────────────────────────
+  function wfmPlanSections() {
+    return [$id('wfm-tabs'), $id('wfm-plan-list'),
+            document.querySelector('.wfm-promo-row'), $id('wfm-promo-msg')];
+  }
+
+  function setPickerHeader(active) {
+    var hdr  = $id('wfm-modal1-hdr');
+    var back = $id('wfm-acct-hdr-back');
+    if (active) {
+      hdr.classList.add('wfm-hdr--3col');
+      back.style.display = '';
+    } else {
+      hdr.classList.remove('wfm-hdr--3col');
+      back.style.display = 'none';
+    }
+  }
+
+  window.wfmHideAccountsPicker = function () {
+    $id('wfm-acct-picker').style.display = 'none';
+    wfmPlanSections().forEach(function (el) { if (el) el.style.display = ''; });
+    setPickerHeader(false);
+  };
+
+  function wfmShowAccountsPicker(preserveCount) {
+    var plan = state.selectedPlan;
+    if (!preserveCount) state.additionalAccounts = 0;
+    var max = plan.max_additional_seats;
+    $id('wfm-acct-sub').textContent = state.trialMode
+      ? 'Add more accounts (free during your trial)'
+      : 'Add more accounts (' + money(plan.seatCents) + ' per account' + plan.periodSuffix + ')';
+    $id('wfm-acct-count').textContent = state.additionalAccounts + ' / ' + max;
+    updateAcctTotal();
+    wfmPlanSections().forEach(function (el) { if (el) el.style.display = 'none'; });
+    $id('wfm-acct-picker').style.display = 'block';
+    setPickerHeader(true);
+  }
+
+  window.wfmChangeAccounts = function (delta) {
+    var plan = state.selectedPlan;
+    var max  = plan.max_additional_seats;
+    var next = Math.max(0, Math.min(max, state.additionalAccounts + delta));
+    if (next === state.additionalAccounts) return;
+    state.additionalAccounts = next;
+    $id('wfm-acct-count').textContent = state.additionalAccounts + ' / ' + max;
+    updateAcctTotal();
+    if (state.promoCode) revalidatePromo();
+  };
+
+  function updateAcctTotal() {
+    var t = totals();
+    $id('wfm-acct-total').textContent = 'Total due today: ' + money(t.dueTodayCents);
+    $id('wfm-bar-price').textContent = money(t.dueTodayCents) + ' due today';
+  }
+
+  window.wfmConfirmAccounts = function () {
+    state.cameFromPicker = true;
+    wfmHideAccountsPicker();
+    wfmOpenModal2();
+  };
+
+  // ── Step 2 ─────────────────────────────────────────────────────
+  window.wfmOpenStep2 = function () {
+    if (!state.selectedPlan) return;
+
+    // If the accounts picker is active, footer Continue = confirm selection
+    if ($id('wfm-acct-picker').style.display !== 'none') {
+      wfmConfirmAccounts();
+      return;
+    }
+
+    if (state.selectedPlan.max_additional_seats > 0) {
+      wfmShowAccountsPicker();
+      return;
+    }
+    wfmOpenModal2();
+  };
+
+  // ── Trial signup ───────────────────────────────────────────────
+  // Called from a plan card on the main page — opens Modal 1 filtered to
+  // that plan type and in trial mode so Continue goes to the trial form.
+  window.wfmOpenTrial = function (planNameHint) {
+    wfmOpen(planNameHint || null); // opens modal 1, resets all state
+    state.trialMode = true; // set after wfmOpen so it survives the reset
+    $id('wfm-modal1').classList.add('wfm-trial-mode');
+  };
+
+  function renewalDate(trialDays) {
+    var rd = new Date();
+    rd.setDate(rd.getDate() + trialDays);
+    return (rd.getMonth() + 1).toString().padStart(2, '0') + '/'
+         + rd.getDate().toString().padStart(2, '0') + '/'
+         + rd.getFullYear();
+  }
+
+  function renderSummary() {
+    var plan     = state.selectedPlan;
+    var t        = totals();
+    var features = plan.features.slice(0, 6).map(function (f) {
+      return '<li>' + checkSvg() + '<span>' + esc(f) + '</span></li>';
+    }).join('');
+
+    if (state.trialMode) {
+      var trialDays  = plan.trial_period_days;
+      var renewalStr = renewalDate(trialDays);
+      // Additional accounts are free during the trial but are billed once
+      // the membership converts.
+      var planAmount    = money(t.renewalCents);
+      var durationLabel = plan.plan_duration + ' Membership After Trial Ends';
+      var trialAcctRow  = state.additionalAccounts > 0
+        ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong style="color:var(--ok,#2e9e5b);">$0.00 today</strong></div>'
+        : '';
+      $id('wfm-summary-content').innerHTML =
+          '<div class="wfm-plan-header">'
+        +   '<div class="wfm-plan-header-info">'
+        +     '<div class="wfm-plan-header-name">' + esc(plan.name) + '</div>'
+        +     '<div class="wfm-preview-badge">Limited Trial</div>'
+        +   '</div>'
+        + '</div>'
+        + '<div class="wfm-summary-divider"></div>'
+        + '<div class="wfm-summary-row"><span>Preview Period</span><strong>' + trialDays + ' days</strong></div>'
+        + trialAcctRow
+        + '<div class="wfm-summary-row"><span>Due Today</span><strong style="color:var(--ok,#2e9e5b);">$0.00</strong></div>'
+        + '<div class="wfm-summary-row"><span>' + esc(durationLabel) + '</span><strong>' + planAmount + '</strong></div>'
+        + '<div class="wfm-summary-row" style="border-bottom:none"><span>First Renewal Date <span class="wfm-info-icon" title="Date of first payment if you do not cancel.">ⓘ</span></span><strong>' + renewalStr + '</strong></div>'
+        + '<div class="wfm-summary-divider"></div>'
+        + '<p class="wfm-trial-notice"><em>A valid card is required. You will not be charged today. If you do not cancel before ' + renewalStr + ', your membership will automatically renew at ' + planAmount + esc(plan.periodSuffix) + ' plus applicable taxes.</em></p>'
+        + (SHOW_TRIAL_CONVERSION_NOTICE ? ''
+          + '<div class="wfm-trial-callout">'
+          +   '<svg class="wfm-trial-callout-icon" viewBox="0 0 68 64" xmlns="http://www.w3.org/2000/svg">'
+          +     '<path d="M 35 3 L 32 13 L 16 14 L 17 20 L 10 39 L 14 43 L 23 43 L 27 36 L 19 17 L 32 17 L 34 47 L 25 55 L 46 55 L 38 47 L 38 18 L 52 17 L 44 37 L 48 43 L 58 43 L 62 36 L 54 19 L 56 14 L 40 13 L 40 7 Z M 52 23 L 54 23 L 57 28 L 57 30 L 58 31 L 58 33 L 59 34 L 59 36 L 58 37 L 48 37 L 47 36 L 47 35 L 48 34 L 48 32 L 49 31 L 49 29 L 50 28 L 50 27 L 51 26 L 51 24 Z M 18 22 L 19 22 L 20 23 L 20 25 L 22 28 L 22 30 L 23 31 L 23 33 L 24 34 L 24 36 L 23 37 L 14 37 L 13 36 L 13 33 L 14 32 L 14 30 L 15 29 L 15 28 L 17 25 L 17 23 Z" fill="currentColor" fill-rule="evenodd"/>'
+          +   '</svg>'
+          +   '<span>If you request live legal support during the preview period, your paid membership will begin immediately.</span>'
+          + '</div>' : '');
+    } else {
+      var discountLabel = 'Discount';
+      if (t.freeMonths > 0) discountLabel = 'Promo (' + discountText(t) + ')';
+      var discountValue = t.discountCents > 0
+        ? '<strong style="color:var(--ok,#2e9e5b);">-' + money(t.discountCents) + '</strong>'
+        : '<strong>$0.00</strong>';
+      var acctRow = state.additionalAccounts > 0
+        ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong>' + money(t.seatCents) + '</strong></div>'
+        : '';
+      $id('wfm-summary-content').innerHTML =
+          '<div class="wfm-summary-row wfm-summary-row--plan"><span>' + esc(plan.name) + '</span><span class="wfm-summary-period">' + esc(plan.plan_duration) + '</span></div>'
+        + '<div class="wfm-summary-row"><span>Primary Account</span><strong>' + money(t.baseCents) + '</strong></div>'
+        + '<div class="wfm-summary-row"><span>' + esc(discountLabel) + '</span>' + discountValue + '</div>'
+        + acctRow
+        + '<div class="wfm-summary-row wfm-summary-row--total"><span>Total Amount</span><strong>' + money(t.totalCents) + '</strong></div>'
+        + '<div class="wfm-summary-total">' + money(t.totalCents) + '</div>'
+        + (features ? '<ul class="wfm-summary-features">' + features + '</ul>' : '');
+    }
+  }
+
+  function wfmOpenModal2() {
+    renderSummary();
+    $id('wfm-modal1').classList.remove('wfm-open');
+    $id('wfm-modal2').classList.add('wfm-open');
+    // Already verified in this popup session: straight to the card.
+    var verified = state.verifiedEmail && state.buyer.email === state.verifiedEmail;
+    goToStep(verified ? 'payment' : 'account');
+  }
+
+  // ── Modal 2 step machine ───────────────────────────────────────
+  var STEP_NUMBER = { account: 2, code: 3, payment: 4 };
+
+  function goToStep(step) {
+    state.step = step;
+    ['account', 'code', 'payment', 'success'].forEach(function (s) {
+      $id('wfm-panel-' + s).hidden = (s !== step);
+    });
+    var backBtn = $id('wfm-modal2-back');
+    var label   = $id('wfm-step-label');
+    var title   = $id('wfm-modal2-title');
+    backBtn.style.visibility = step === 'success' ? 'hidden' : '';
+    label.textContent = STEP_NUMBER[step] ? 'Step ' + STEP_NUMBER[step] + ' of 4' : '';
+    label.style.display = STEP_NUMBER[step] ? '' : 'none';
+    // Account and code are standalone screens: one centred card, no plan
+    // summary, and the card's own hero carries the title.
+    var standalone = step === 'account' || step === 'code';
+    $id('wfm-modal2').classList.toggle('wfm-standalone', standalone);
+    title.style.display = standalone ? 'none' : '';
+
+    if (step === 'account') {
+      title.textContent = 'Create Your Account';
+      $id('wfm-first').value = state.buyer.firstName;
+      $id('wfm-last').value  = state.buyer.lastName;
+      $id('wfm-email').value = state.buyer.email;
+      clearError($id('wfm-account-error'));
+      setTimeout(function () { $id(state.buyer.firstName ? 'wfm-email' : 'wfm-first').focus(); }, 50);
+    } else if (step === 'code') {
+      title.textContent = "Verify it's you";
+      renderCodeHeader();
+      clearError($id('wfm-code-error'));
+      renderCodeBoxes();
+      renderResend();
+      setTimeout(function () { var b = $id('wfm-otp-0'); if (b) b.focus(); }, 50);
+    } else if (step === 'payment') {
+      renderPaymentStep();
+    }
+    $id('wfm-modal2').querySelector('.wfm-scroll-body').scrollTop = 0;
+  }
+
+  window.wfmModal2Back = function () {
+    if (state.busy) return;
+    if (state.step === 'account') { wfmBackToPlans(); return; }
+    // From the code or the card, Back returns to Create Your Account
+    // with the fields filled, so a mistyped email can be fixed.
+    stopResendTimer();
+    goToStep('account');
+  };
+
+  window.wfmChangeEmail = function () {
+    if (state.busy) return;
+    goToStep('account');
+  };
+
+  function setBusy(busy, btn, labelEl, busyText, idleText) {
+    state.busy = busy;
+    btn.disabled = busy;
+    labelEl.textContent = busy ? busyText : idleText;
+  }
+
+  // ── Panel A: Create Your Account ───────────────────────────────
+  // The buttons are plain click handlers, not form submits: Webflow's
+  // preview runs the page in a sandboxed frame where form submission is
+  // dropped before any submit event fires. Enter in a field still works.
+  function onEnter(formId, fn) {
+    var form = $id(formId);
+    form.addEventListener('submit', function (e) { e.preventDefault(); fn(); });
+    form.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
+        e.preventDefault();
+        fn();
+      }
+    });
+  }
+
+  window.wfmSubmitAccount = function () {
+    if (state.busy) return;
+    var errEl   = $id('wfm-account-error');
+    var btn     = $id('wfm-account-btn');
+    var labelEl = $id('wfm-account-label');
+    clearError(errEl);
+
+    var firstName = $id('wfm-first').value.trim();
+    var lastName  = $id('wfm-last').value.trim();
+    var email     = $id('wfm-email').value.trim().toLowerCase();
+
+    if (!firstName || !lastName) { showError(errEl, 'Enter your first and last name.'); return; }
+    if (!isValidEmail(email))    { showError(errEl, 'Enter a valid email address.'); return; }
+
+    state.buyer = { firstName: firstName, lastName: lastName, email: email };
+
+    // Same address already passed the code in this session: no new code.
+    if (state.verifiedEmail && state.verifiedEmail === email) {
+      goToStep('payment');
+      return;
+    }
+
+    setBusy(true, btn, labelEl, 'Checking…', 'Verify Email to Checkout');
+    gql(GQL.ELIGIBILITY, { email: email })
+      .then(function (d) {
+        var el = d.purchaseEligibility || {};
+        if (!el.eligible) {
+          // Server wording, as returned. Stay on the form; send nothing.
+          throw new Error(el.message || 'This email can’t be used to purchase a plan.');
+        }
+        labelEl.textContent = 'Sending code…';
+        return sendCode(email);
+      })
+      .then(function () {
+        setBusy(false, btn, labelEl, '', 'Verify Email to Checkout');
+        goToStep('code');
+      })
+      .catch(function (err) {
+        setBusy(false, btn, labelEl, '', 'Verify Email to Checkout');
+        showError(errEl, friendlyError(err));
+      });
+  };
+  onEnter('wfm-account-form', wfmSubmitAccount);
+
+  function renderCodeHeader() {
+    $id('wfm-code-sub').textContent = 'Enter the ' + state.otp.codeLength + '-digit code we sent.';
+    $id('wfm-code-email').textContent = state.otp.maskedEmail || state.buyer.email;
+  }
+
+  function sendCode(email) {
+    return gql(GQL.REQUEST_CODE, { email: email }).then(function (d) {
+      var r = d.requestLoginOtp || {};
+      state.otp.code        = '';
+      state.otp.codeLength  = parseInt(r.codeLength, 10) || OTP_LENGTH_FALLBACK;
+      state.otp.maskedEmail = r.maskedEmail || '';
+      state.otp.resendAfter = parseInt(r.resendAfterSeconds, 10) || RESEND_AFTER_FALLBACK;
+      startResendTimer(state.otp.resendAfter);
+      return r;
+    });
+  }
+
+  // ── Panel B: Enter the email code ──────────────────────────────
+  // Borrowed from the app's CodeBoxes: one box per digit, a pasted or
+  // autofilled code spreads across the boxes, Backspace steps back.
+  function renderCodeBoxes() {
+    var row = $id('wfm-otp-row');
+    var len = state.otp.codeLength;
+    var html = '';
+    for (var i = 0; i < len; i++) {
+      html += '<input class="wfm-otp-box" id="wfm-otp-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*"'
+            + ' maxlength="' + len + '" autocomplete="' + (i === 0 ? 'one-time-code' : 'off') + '"'
+            + ' aria-label="Digit ' + (i + 1) + ' of ' + len + '" data-i="' + i + '">';
+    }
+    row.innerHTML = html;
+    syncCodeBoxes();
+  }
+
+  function codeBox(i) { return $id('wfm-otp-' + i); }
+
+  function syncCodeBoxes() {
+    var len = state.otp.codeLength;
+    for (var i = 0; i < len; i++) {
+      var box = codeBox(i);
+      if (!box) continue;
+      var d = state.otp.code[i] || '';
+      box.value = d;
+      box.classList.toggle('filled', !!d);
+      box.disabled = state.busy;
+    }
+    $id('wfm-code-btn').disabled = state.busy || state.otp.code.length !== len;
+  }
+
+  function setDigit(i, v) {
+    var len  = state.otp.codeLength;
+    var code = state.otp.code;
+    var raw  = String(v || '').replace(/\D/g, '');
+    if (raw.length > 1) {
+      state.otp.code = (code.slice(0, i) + raw).slice(0, len);
+      syncCodeBoxes();
+      var target = codeBox(Math.min(i + raw.length, len - 1));
+      if (target) target.focus();
+    } else {
+      var d = raw.slice(-1);
+      state.otp.code = (code.slice(0, i) + d + code.slice(i + 1)).slice(0, len);
+      syncCodeBoxes();
+      if (d && i < len - 1) { var next = codeBox(i + 1); if (next) next.focus(); }
+    }
+    if (state.otp.code.length === len) verifyCode();
+  }
+
+  $id('wfm-otp-row').addEventListener('input', function (e) {
+    var t = e.target;
+    if (!t || t.className.indexOf('wfm-otp-box') === -1) return;
+    setDigit(parseInt(t.getAttribute('data-i'), 10), t.value);
+  });
+  $id('wfm-otp-row').addEventListener('keydown', function (e) {
+    var t = e.target;
+    if (!t || t.className.indexOf('wfm-otp-box') === -1) return;
+    var i = parseInt(t.getAttribute('data-i'), 10);
+    if (e.key === 'Backspace' && !t.value && i > 0) {
+      var prev = codeBox(i - 1);
+      state.otp.code = state.otp.code.slice(0, i - 1);
+      syncCodeBoxes();
+      if (prev) prev.focus();
+      e.preventDefault();
+    }
+  });
+  $id('wfm-otp-row').addEventListener('paste', function (e) {
+    var t = e.target;
+    if (!t || t.className.indexOf('wfm-otp-box') === -1) return;
+    var text = (e.clipboardData || window.clipboardData).getData('text');
+    if (!text) return;
+    e.preventDefault();
+    setDigit(parseInt(t.getAttribute('data-i'), 10), text);
+  });
+
+  window.wfmVerifyCode = function () { verifyCode(); };
+  onEnter('wfm-code-form', verifyCode);
+
+  function verifyCode() {
+    if (state.busy) return;
+    var len = state.otp.codeLength;
+    if (state.otp.code.length !== len) return;
+    var errEl   = $id('wfm-code-error');
+    var btn     = $id('wfm-code-btn');
+    var labelEl = $id('wfm-code-label');
+    clearError(errEl);
+    setBusy(true, btn, labelEl, 'Verifying…', 'Verify Email');
+    syncCodeBoxes();
+
+    var email = state.buyer.email;
+    // Ask only for userID. The call can also return login tokens; the
+    // website doesn't need them and analytics scripts run on this page.
+    gql(GQL.VERIFY_CODE, {
+      email:     email,
+      code:      state.otp.code,
+      country:   COUNTRY,
+      firstName: state.buyer.firstName,
+      lastName:  state.buyer.lastName,
+    })
+      .then(function () {
+        state.verifiedEmail = email;
+        stopResendTimer();
+        setBusy(false, btn, labelEl, '', 'Verify Email');
+        goToStep('payment');
+      })
+      .catch(function (err) {
+        state.otp.code = '';
+        setBusy(false, btn, labelEl, '', 'Verify Email');
+        syncCodeBoxes();
+        showError(errEl, friendlyError(err));
+        var first = codeBox(0);
+        if (first) first.focus();
+      });
+  }
+
+  // Resend: a countdown from the server's resendAfterSeconds, then a button.
+  function countdown(seconds) {
+    var total = Math.max(0, Math.floor(seconds || 0));
+    var m = Math.floor(total / 60);
+    var s = total % 60;
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  function startResendTimer(seconds) {
+    stopResendTimer();
+    state.resendIn = seconds;
+    renderResend();
+    state.resendTimer = window.setInterval(function () {
+      state.resendIn = Math.max(0, state.resendIn - 1);
+      renderResend();
+      if (state.resendIn <= 0) stopResendTimer();
+    }, 1000);
+  }
+
+  function stopResendTimer() {
+    if (state.resendTimer) { window.clearInterval(state.resendTimer); state.resendTimer = null; }
+  }
+
+  function renderResend() {
+    var el = $id('wfm-resend');
+    el.innerHTML = 'Didn\u2019t receive a code? ' + (state.resendIn > 0
+      ? '<span class="wfm-countdown">' + countdown(state.resendIn) + '</span>'
+      : '<button type="button" class="wfm-link-btn" onclick="wfmResendCode()">Resend</button>');
+  }
+
+  window.wfmResendCode = function () {
+    if (state.busy || state.resendIn > 0) return;
+    var errEl = $id('wfm-code-error');
+    clearError(errEl);
+    $id('wfm-resend').innerHTML = '<span class="wfm-resend-muted">Sending…</span>';
+    sendCode(state.buyer.email)
+      .then(function () {
+        syncCodeBoxes();
+        renderCodeHeader();
+        var first = codeBox(0);
+        if (first) first.focus();
+      })
+      .catch(function (err) {
+        renderResend();
+        showError(errEl, friendlyError(err));
+      });
+  };
+
+  // ── Panel C: card, terms, pay or start the trial ───────────────
+  function paymentLabel() {
+    var plan = state.selectedPlan;
+    return state.trialMode
+      ? 'Start ' + plan.trial_period_days + '-Day Limited Trial'
+      : 'Pay ' + money(totals().dueTodayCents);
+  }
+
+  function renderPaymentStep() {
+    var plan  = state.selectedPlan;
+    var title = $id('wfm-modal2-title');
+    // Prepopulated from Create Your Account; read-only so the paid-for
+    // email is the verified one. "Edit your details" goes back to change them.
+    $id('wfm-pay-first').value     = state.buyer.firstName;
+    $id('wfm-pay-last').value      = state.buyer.lastName;
+    $id('wfm-payment-email').value = state.buyer.email;
+    clearError($id('wfm-error'));
+    $id('wfm-card-errors').textContent = '';
+
+    var billingNotice = $id('wfm-trial-billing-notice');
+    var trialTncRow   = $id('wfm-trial-tnc-row');
+    var trialHelp     = $id('wfm-trial-help');
+
+    if (state.trialMode) {
+      var trialDays  = plan.trial_period_days;
+      var renewalStr = renewalDate(trialDays);
+      var planAmount = money(totals().renewalCents);
+      title.textContent = 'Start Your ' + trialDays + '-Day Limited Trial';
+      $id('wfm-payment-heading').textContent = 'Card details';
+      billingNotice.innerHTML = 'You will be charged ' + planAmount + esc(plan.periodSuffix) + ' plus applicable taxes on ' + renewalStr + ' unless you cancel before then. You may cancel through <em>Account Settings &gt; Plan Details &gt; Manage Membership.</em>';
+      billingNotice.style.display = '';
+      $id('wfm-trial-tnc-label').textContent = 'I understand that my ' + trialDays + '-Day Limited Trial will automatically renew unless canceled before ' + renewalStr + '.';
+      trialTncRow.style.display = '';
+      trialHelp.style.display = '';
+    } else {
+      title.textContent = 'Checkout';
+      $id('wfm-payment-heading').textContent = 'Payment details';
+      billingNotice.style.display = 'none';
+      trialTncRow.style.display = 'none';
+      trialHelp.style.display = 'none';
+    }
+    $id('wfm-submit-label').textContent = paymentLabel();
+    updateSubmitBtn();
+    mountCard();
+    if (!stripe || !cardElement) {
+      $id('wfm-card-errors').textContent = 'Card entry isn’t available right now. Please refresh the page and try again.';
+    }
+  }
+
+  function updateSubmitBtn() {
+    var tnc      = $id('wfm-tnc').checked;
+    var trialTnc = $id('wfm-trial-tnc').checked;
+    $id('wfm-submit-btn').disabled = state.busy || !tnc || (state.trialMode && !trialTnc) || !cardElement;
+  }
+  $id('wfm-tnc').addEventListener('change', updateSubmitBtn);
+  $id('wfm-trial-tnc').addEventListener('change', updateSubmitBtn);
+
+  window.wfmSubmitPayment = function () {
+    if (state.busy || !stripe || !cardElement) return;
+
+    var btn     = $id('wfm-submit-btn');
+    var labelEl = $id('wfm-submit-label');
+    var errEl   = $id('wfm-error');
+    var plan    = state.selectedPlan;
+    var buyer   = state.buyer;
+    var t       = totals();
+
+    clearError(errEl);
+    // Disabled while in flight so a double click can't send two.
+    setBusy(true, btn, labelEl, 'Processing…', paymentLabel());
+
+    function fail(msg) {
+      setBusy(false, btn, labelEl, '', paymentLabel());
+      updateSubmitBtn();
+      showError(errEl, msg);
+    }
+
+    stripe.createPaymentMethod({
+      type: 'card',
+      card: cardElement,
+      billing_details: { name: buyer.firstName + ' ' + buyer.lastName, email: buyer.email },
+    }).then(function (result) {
+      if (result.error) { fail(result.error.message); return; }
+
+      return gql(GQL.PUBLIC_CHECKOUT, { i: {
+        email:                 buyer.email,
+        name:                  buyer.firstName + ' ' + buyer.lastName,
+        country:               COUNTRY,
+        priceID:               plan.priceId,
+        additionalSeatPriceID: state.additionalAccounts > 0 ? plan.seatPriceId : null,
+        additionalSeats:       state.additionalAccounts || 0,
+        trialDays:             state.trialMode ? plan.trial_period_days : 0,
+        providerCode:          'stripe',
+        providerRef:           result.paymentMethod.id,
+        promoCode:             state.trialMode ? null : (state.promoCode || null),
+      } }).then(function (data) {
+        var r = data.publicCheckout || {};
+        if (r.alreadySubscribed) { fail(r.message || 'This email already has a plan. Nothing was charged.'); return; }
+        if (r.status === 'active' || r.status === 'trial') { finishCheckout(r); return; }
+        if (r.status === 'past_due') {
+          labelEl.textContent = 'Confirming payment…';
+          showError(errEl, 'We’re confirming your payment. This can take a moment.');
+          pollSubscription(buyer.email, function () { finishCheckout(r); }, function () {
+            fail('We couldn’t confirm your payment yet. Check your inbox for a receipt before trying again, or contact support@attorney-shield.com.');
+          });
+          return;
+        }
+        // 'declined' or anything unexpected: the server's own wording.
+        fail(r.message || 'Your card was declined. Please try another card.');
+      });
+    }).catch(function (err) {
+      fail(friendlyError(err));
+    });
+  };
+  onEnter('wfm-payment-form', wfmSubmitPayment);
+
+  function pollSubscription(email, onActive, onTimeout) {
+    var attempts = 0;
+    (function tick() {
+      attempts++;
+      gql(GQL.SUB_STATUS, { email: email })
+        .then(function (d) {
+          var s = d.publicSubscriptionStatus || {};
+          if (s.hasActivePlan) return onActive();
+          if (attempts >= PAST_DUE_POLL_MAX) return onTimeout();
+          setTimeout(tick, PAST_DUE_POLL_MS);
+        })
+        .catch(function () {
+          if (attempts >= PAST_DUE_POLL_MAX) return onTimeout();
+          setTimeout(tick, PAST_DUE_POLL_MS);
+        });
+    })();
+  }
+
+  // ── Panel D: Done ──────────────────────────────────────────────
+  function finishCheckout(r) {
+    state.busy = false;
+    var plan = state.selectedPlan;
+    var title = $id('wfm-success-title');
+    var msg   = $id('wfm-success-msg');
+    var note  = $id('wfm-success-note');
+    if (state.trialMode) {
+      title.textContent = 'Trial Started!';
+      msg.textContent = 'Your ' + plan.trial_period_days + '-day free preview is now active. Please go to the Attorney Shield app, navigate to the login screen, then enter your email to complete your enrollment.';
+    } else {
+      title.textContent = 'Payment Successful!';
+      msg.textContent = 'Your account has been activated. Please go to the Attorney Shield app, navigate to the login screen, then enter your email to complete your enrollment.';
+    }
+    if (r && r.promoRefusedReason) {
+      note.textContent = r.promoRefusedReason + ' You were charged the full price.';
+      note.hidden = false;
+    } else {
+      note.textContent = '';
+      note.hidden = true;
+    }
+    $id('wfm-modal2-title').textContent = state.trialMode ? 'Trial Started' : 'All Set';
+    goToStep('success');
+  }
+
+  // ── Resets ─────────────────────────────────────────────────────
+  function resetBuyer() {
+    state.buyer = { firstName: '', lastName: '', email: '' };
+    state.verifiedEmail = null;
+    state.otp = { code: '', codeLength: OTP_LENGTH_FALLBACK, maskedEmail: '', resendAfter: RESEND_AFTER_FALLBACK };
+    stopResendTimer();
+    state.resendIn = 0;
+  }
+
+  function resetStep2() {
+    state.busy = false;
+    stopResendTimer();
+    $id('wfm-tnc').checked = false;
+    $id('wfm-trial-tnc').checked = false;
+    $id('wfm-submit-btn').disabled = true;
+    clearError($id('wfm-account-error'));
+    clearError($id('wfm-code-error'));
+    clearError($id('wfm-error'));
+    $id('wfm-card-errors').textContent = '';
+    if (cardElement) cardElement.clear();
+  }
+})();

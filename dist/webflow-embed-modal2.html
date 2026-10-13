@@ -1,0 +1,129 @@
+<div id="wfm-modal2" class="wfm-overlay" role="dialog" aria-modal="true" aria-label="Create your account">
+  <div class="wfm-scroll-body">
+  <div class="wfm-container">
+    <div class="wfm-hdr wfm-hdr--3col">
+      <button class="wfm-back" id="wfm-modal2-back" onclick="wfmModal2Back()">← Back</button>
+      <div class="wfm-hdr-center">
+        <div class="wfm-step-label" id="wfm-step-label"></div>
+        <h2 class="wfm-title" id="wfm-modal2-title">Create Your Account</h2>
+      </div>
+      <button class="wfm-close" onclick="wfmClose()" aria-label="Close">✕</button>
+    </div>
+    <div class="wfm-two-col">
+      <!-- Left: plan summary -->
+      <div class="wfm-summary-card">
+        <h4>Your Selection</h4>
+        <div id="wfm-summary-content"></div>
+      </div>
+      <!-- Right: the step panels -->
+      <div class="wfm-form-card">
+
+        <!-- Panel A: Create Your Account -->
+        <div class="wfm-panel" id="wfm-panel-account">
+          <div class="wfm-hero">
+            <img class="wfm-shield" src="asi-gold-logo.png" alt="" onerror="this.style.display='none'">
+            <h3>Create Your Account</h3>
+            <p>Enter your legal name and email address to continue.</p>
+          </div>
+          <form id="wfm-account-form" autocomplete="on" novalidate>
+            <div class="wfm-name-row">
+              <div class="wfm-field">
+                <label for="wfm-first">First Name</label>
+                <input class="wfm-input" id="wfm-first" name="first_name" type="text" placeholder="First name" required autocomplete="given-name">
+              </div>
+              <div class="wfm-field">
+                <label for="wfm-last">Last Name</label>
+                <input class="wfm-input" id="wfm-last" name="last_name" type="text" placeholder="Last name" required autocomplete="family-name">
+              </div>
+            </div>
+            <div class="wfm-field">
+              <label for="wfm-email">Email Address</label>
+              <input class="wfm-input" id="wfm-email" name="email" type="email" inputmode="email" placeholder="you@example.com" required autocomplete="email">
+            </div>
+            <button type="button" class="wfm-submit-btn" id="wfm-account-btn" onclick="wfmSubmitAccount()">
+              <span id="wfm-account-label">Verify Email to Checkout</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+            <div id="wfm-account-error" class="wfm-error-msg" role="alert"></div>
+          </form>
+        </div>
+
+        <!-- Panel B: Enter the email code -->
+        <div class="wfm-panel" id="wfm-panel-code" hidden>
+          <div class="wfm-hero">
+            <img class="wfm-shield" src="asi-gold-logo.png" alt="" onerror="this.style.display='none'">
+            <h3>Verify it's you</h3>
+            <p id="wfm-code-sub">Enter the 4-digit code we sent.</p>
+          </div>
+          <form id="wfm-code-form" novalidate>
+            <div class="wfm-channel-row" aria-live="polite">
+              <span class="wfm-channel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>
+              <span class="wfm-channel-text" id="wfm-code-email"></span>
+              <span class="wfm-channel-check" aria-label="Code sent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg></span>
+            </div>
+            <div class="wfm-otp-row" id="wfm-otp-row" role="group" aria-label="Verification code"></div>
+            <p class="wfm-hint">Can't find it? Check your spam or junk folder.</p>
+            <button type="button" class="wfm-submit-btn" id="wfm-code-btn" onclick="wfmVerifyCode()" disabled>
+              <span id="wfm-code-label">Verify Email</span>
+            </button>
+            <div id="wfm-code-error" class="wfm-error-msg" role="alert"></div>
+            <p class="wfm-resend" id="wfm-resend"></p>
+          </form>
+        </div>
+
+        <!-- Panel C: Card, terms, pay or start the trial -->
+        <div class="wfm-panel" id="wfm-panel-payment" hidden>
+          <h3 id="wfm-payment-heading">Payment details</h3>
+          <form id="wfm-payment-form" novalidate>
+            <div class="wfm-name-row">
+              <div class="wfm-field">
+                <label for="wfm-pay-first">First Name</label>
+                <input class="wfm-input" id="wfm-pay-first" type="text" readonly tabindex="-1">
+              </div>
+              <div class="wfm-field">
+                <label for="wfm-pay-last">Last Name</label>
+                <input class="wfm-input" id="wfm-pay-last" type="text" readonly tabindex="-1">
+              </div>
+            </div>
+            <div class="wfm-field">
+              <label for="wfm-payment-email">Email Address</label>
+              <input class="wfm-input" id="wfm-payment-email" type="email" readonly tabindex="-1">
+              <div class="wfm-field-link"><button type="button" class="wfm-link-btn" onclick="wfmChangeEmail()">Edit your details</button></div>
+            </div>
+            <div class="wfm-field">
+              <label>Card Details</label>
+              <div id="wfm-card-element" class="wfm-card-element"></div>
+              <div id="wfm-card-errors" class="wfm-card-errors"></div>
+            </div>
+            <p class="wfm-trial-billing-notice" id="wfm-trial-billing-notice" style="display:none"></p>
+            <label class="wfm-tnc-row">
+              <input type="checkbox" id="wfm-tnc">
+              <span>I agree to the <a href="https://attorney-shield.com/policies/terms-of-service" target="_blank" rel="noopener">Terms of Service</a> and <a href="https://attorney-shield.com/policies/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>.</span>
+            </label>
+            <label class="wfm-tnc-row wfm-trial-tnc-row" id="wfm-trial-tnc-row" style="display:none">
+              <input type="checkbox" id="wfm-trial-tnc">
+              <span id="wfm-trial-tnc-label"></span>
+            </label>
+            <button type="button" class="wfm-submit-btn" id="wfm-submit-btn" onclick="wfmSubmitPayment()" disabled>
+              <span id="wfm-submit-label">Pay Now</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+            <div id="wfm-error" class="wfm-error-msg" role="alert"></div>
+            <p class="wfm-trial-help" id="wfm-trial-help" style="display:none">Need help? <a href="mailto:support@attorney-shield.com">Contact us</a></p>
+          </form>
+        </div>
+
+        <!-- Panel D: Done -->
+        <div class="wfm-panel wfm-success" id="wfm-panel-success" hidden>
+          <div class="wfm-success-icon">✓</div>
+          <h2 class="wfm-success-title" id="wfm-success-title">Payment Successful!</h2>
+          <p class="wfm-success-msg" id="wfm-success-msg"></p>
+          <p class="wfm-success-note" id="wfm-success-note" hidden></p>
+          <button class="wfm-submit-btn wfm-submit-btn--full" onclick="wfmClose()">Done</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  </div><!-- /.wfm-scroll-body -->
+</div>

@@ -21,8 +21,21 @@ head = open('dist/webflow-head.html').read()
 foot = open('dist/webflow-footer.html').read()
 s = s.replace('<link rel="stylesheet" href="plan-selection.css">', '<link rel="stylesheet" href="../plan-selection.css">')
 s = s.replace('src="asi-gold-logo.png"', 'src="../asi-gold-logo.png"')
-s = re.sub(r'<link rel="stylesheet" href="plan-modals.css">\s*<script src="https://js.stripe.com/v3/"></script>', head.strip(), s)
+# a function, not a string: a replacement string would treat the CSS's backslash escapes as group references
+s = re.sub(r'<link rel="stylesheet" href="plan-modals.css">\s*<script src="https://js.stripe.com/v3/"></script>', lambda m: head.strip(), s)
 s = s.replace('<script src="plan-checkout.js"></script>', foot.strip())
 open('dist/preview.html', 'w').write(s)
 PY
 echo "dist/preview.html written"
+# dist/webflow-embed-modal1.html / -modal2.html: the modal markup for Webflow Embed
+# elements (each capped at 10,000 characters, so the two modals are separate embeds).
+python3 - <<'PY'
+import re
+s = open('Merged Plan Selection.html').read()
+m1 = re.search(r'    <!-- Modal 1: Plan Selection -->\n(.*?)\n\n    <!-- Modal 2', s, re.S).group(1)
+m2 = re.search(r'    <!-- Modal 2: .*?-->\n(.*?)\n\n    <script src="plan-checkout.js">', s, re.S).group(1)
+for name, body in (('modal1', m1), ('modal2', m2)):
+    body = '\n'.join(l[4:] if l.startswith('    ') else l for l in body.split('\n')).strip() + '\n'
+    open(f'dist/webflow-embed-{name}.html', 'w').write(body)
+    print(f'{"dist/webflow-embed-"+name+".html":<34} {len(body):6d} chars')
+PY

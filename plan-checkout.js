@@ -1,7 +1,7 @@
 (function () {
   // ── Configuration ──────────────────────────────────────────────
   // The only line that changes at the cutover.
-  var API = 'https://gateway-dev.attorneyshield.io/query';
+  var API = 'https://gateway-uat.attorneyshield.io/query';
   // var API = 'https://gateway.attorneyshield.io/query';
 
   var COUNTRY  = 'US';
@@ -21,9 +21,9 @@
   // Billing tabs, in display order. A tab only shows when some plan has
   // an active USD price for it.
   var PERIODS = [
-    { interval: 'month', count: 1, label: 'Monthly',    suffix: '/month' },
-    { interval: 'month', count: 6, label: 'Semiannual', suffix: '/6 months' },
-    { interval: 'year',  count: 1, label: 'Annual',     suffix: '/year' },
+    { interval: 'month', count: 1, label: 'Monthly',    suffix: '/month',    words: 'per month' },
+    { interval: 'month', count: 6, label: 'Semiannual', suffix: '/6 months', words: 'per 6 months' },
+    { interval: 'year',  count: 1, label: 'Annual',     suffix: '/year',     words: 'per year' },
   ];
 
   var OTP_LENGTH_FALLBACK   = 4;
@@ -33,18 +33,15 @@
 
   // ── GraphQL documents ──────────────────────────────────────────
   var GQL = {
+    // Additional accounts are priced by the plan price's own
+    // additionalSubaccountFeeCents (0 means free). The "<Plan> Additional
+    // Seat" products were retired on 10 October 2026, so nothing is looked up
+    // for them any more.
     PRODUCTS:
       'query StorefrontProducts($country: String) {' +
       '  storefrontProducts(countryISO2: $country) {' +
       '    id name description isActive isPublic entitlementsJSON' +
-      '    prices { id nickname currency unitAmountCents billingInterval intervalCount isActive }' +
-      '  }' +
-      '}',
-    SEAT_PRODUCTS:
-      'query SeatProducts {' +
-      '  storefrontSeatProducts {' +
-      '    id isActive kind parentProductId' +
-      '    prices { id currency unitAmountCents billingInterval intervalCount isActive }' +
+      '    prices { id nickname currency unitAmountCents billingInterval intervalCount isActive additionalSubaccountFeeCents }' +
       '  }' +
       '}',
     VALIDATE_PROMO:
@@ -220,18 +217,34 @@
       return p.isActive && p.currency === CURRENCY;
     });
   }
-  function seatPriceFor(seatProducts, product, price) {
-    var addon = (seatProducts || []).find(function (s) {
-      return s.isActive && s.kind === 'seat_addon' && s.parentProductId === product.id;
+  // Benefits are admin-authored text, and one of them tends to quote a
+  // per-account price ("Additional accounts (up to 2) for $18 every 6 months
+  // per account"). A fixed sentence can't follow the billing tab, so a benefit
+  // that both mentions extra accounts and quotes a price is replaced by one
+  // derived from the fee that actually bills. Price-free lines are kept.
+  var MENTIONS_EXTRA_SEATS = /\b(additional|extra)\s+(account|member|seat|sub-?account)s?\b/i;
+  var QUOTES_A_PRICE = /\$\s?\d|\b(usd|eur|gbp|kes|ugx)\s?\d|\b\d[\d,]*(\.\d+)?\s?(usd|eur|gbp|kes|ugx)\b/i;
+
+  function planFeatures(ent, period, maxSeats, seatCents) {
+    var authored = Array.isArray(ent.benefits) ? ent.benefits.slice() : [];
+    var derived = null;
+    if (maxSeats > 0) {
+      derived = seatCents > 0
+        ? 'Additional accounts (up to ' + maxSeats + ') for ' + money(seatCents) + ' each ' + period.words
+        : 'Additional accounts (up to ' + maxSeats + ') at no extra cost';
+    }
+    var out = [];
+    var placed = false;
+    authored.forEach(function (b) {
+      var quotesSeatPrice = MENTIONS_EXTRA_SEATS.test(b) && QUOTES_A_PRICE.test(b);
+      if (!quotesSeatPrice) { out.push(b); return; }
+      if (derived && !placed) { out.push(derived); placed = true; }   // same spot as the authored line
     });
-    if (!addon) return null;
-    return (addon.prices || []).find(function (p) {
-      return p.isActive && p.currency === price.currency
-        && p.billingInterval === price.billingInterval && p.intervalCount === price.intervalCount;
-    }) || null;
+    if (derived && !placed) out.push(derived);
+    return out;
   }
 
-  function buildCatalog(products, seatProducts) {
+  function buildCatalog(products) {
     var byPeriod = {};
     (products || []).forEach(function (product) {
       if (product.isActive === false || product.isPublic === false) return;
@@ -240,8 +253,8 @@
       usdPrices(product).forEach(function (price) {
         var period = periodFor(price);
         if (!period) return;
-        var seatPrice = seatPriceFor(seatProducts, product, price);
         var maxSeats  = parseInt(ent.max_additional_seats, 10) || 0;
+        var seatCents = Math.max(0, parseInt(price.additionalSubaccountFeeCents, 10) || 0);
         var plan = {
           id:                   price.id,          // one card per (product, price)
           productId:            product.id,
@@ -251,15 +264,15 @@
           amountCents:          price.unitAmountCents || 0,
           plan_duration:        period.label,
           periodSuffix:         period.suffix,
-          features:             Array.isArray(ent.benefits) ? ent.benefits : [],
+          features:             planFeatures(ent, period, maxSeats, seatCents),
           trial_period_days:    parseInt(ent.trial_period_days, 10) || 0,
           included_subaccounts: parseInt(ent.included_subaccounts, 10) || 0,
           included_seats:       parseInt(ent.included_seats, 10) || 1,
           isFamily:             family,
-          // The stepper only makes sense with a seat price for this period.
-          max_additional_seats: seatPrice ? maxSeats : 0,
-          seatPriceId:          seatPrice ? seatPrice.id : null,
-          seatCents:            seatPrice ? (seatPrice.unitAmountCents || 0) : 0,
+          // The stepper sells whenever the plan allows extra accounts; a fee
+          // of 0 means they are free, not unsold.
+          max_additional_seats: maxSeats,
+          seatCents:            seatCents,
         };
         (byPeriod[period.label] = byPeriod[period.label] || []).push(plan);
       });
@@ -375,12 +388,9 @@
   // ── Load plans from API ────────────────────────────────────────
   function loadPlans() {
     $id('wfm-plan-list').innerHTML = '<div class="wfm-loading"><div class="wfm-spinner"></div>Loading plans…</div>';
-    Promise.all([
-      gql(GQL.PRODUCTS, { country: COUNTRY }),
-      gql(GQL.SEAT_PRODUCTS),
-    ])
+    gql(GQL.PRODUCTS, { country: COUNTRY })
       .then(function (res) {
-        var catalog = buildCatalog(res[0].storefrontProducts, res[1].storefrontSeatProducts);
+        var catalog = buildCatalog(res.storefrontProducts);
         if (!Object.keys(catalog).length) {
           $id('wfm-plan-list').innerHTML = '<div class="wfm-loading">No plans are available right now. Please try again later.</div>';
           return;
@@ -516,19 +526,15 @@
   }
 
   // ── Promo code ─────────────────────────────────────────────────
-  function promoItems() {
-    var plan  = state.selectedPlan;
-    var items = [{ priceId: plan.priceId, quantity: 1 }];
-    if (state.additionalAccounts > 0 && plan.seatPriceId) {
-      items.push({ priceId: plan.seatPriceId, quantity: state.additionalAccounts });
-    }
-    return items;
-  }
-
   function validatePromo(code) {
-    return gql(GQL.VALIDATE_PROMO, {
-      i: { code: code, items: promoItems(), isTrial: !!state.trialMode },
-    }).then(function (d) { return d.validatePromoCode || { valid: false, reason: 'Could not validate promo code.' }; });
+    var input = {
+      code:    code,
+      items:   [{ priceId: state.selectedPlan.priceId, quantity: 1 }],
+      isTrial: !!state.trialMode,
+    };
+    // Additional accounts travel as a count; 0 is the server default.
+    if (state.additionalAccounts > 0) input.additionalSeats = state.additionalAccounts;
+    return gql(GQL.VALIDATE_PROMO, { i: input }).then(function (d) { return d.validatePromoCode || { valid: false, reason: 'Could not validate promo code.' }; });
   }
 
   function renderPromoResult(r) {
@@ -658,7 +664,9 @@
     var max = plan.max_additional_seats;
     $id('wfm-acct-sub').textContent = state.trialMode
       ? 'Add more accounts (free during your trial)'
-      : 'Add more accounts (' + money(plan.seatCents) + ' per account' + plan.periodSuffix + ')';
+      : plan.seatCents > 0
+        ? 'Add more accounts (' + money(plan.seatCents) + ' per account' + plan.periodSuffix + ')'
+        : 'Add more accounts (no extra cost)';
     $id('wfm-acct-count').textContent = state.additionalAccounts + ' / ' + max;
     updateAcctTotal();
     wfmPlanSections().forEach(function (el) { if (el) el.style.display = 'none'; });
@@ -744,7 +752,7 @@
           '<div class="wfm-plan-header">'
         +   '<div class="wfm-plan-header-info">'
         +     '<div class="wfm-plan-header-name">' + esc(plan.name) + '</div>'
-        +     '<div class="wfm-preview-badge">Limited Trial</div>'
+        +     '<div class="wfm-preview-badge">Trial</div>'
         +   '</div>'
         + '</div>'
         + '<div class="wfm-summary-divider"></div>'
@@ -769,7 +777,7 @@
         ? '<strong style="color:var(--ok,#2e9e5b);">-' + money(t.discountCents) + '</strong>'
         : '<strong>$0.00</strong>';
       var acctRow = state.additionalAccounts > 0
-        ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong>' + money(t.seatCents) + '</strong></div>'
+        ? '<div class="wfm-summary-row"><span>Additional accounts (+' + state.additionalAccounts + ')</span><strong>' + (plan.seatCents > 0 ? money(t.seatCents) : 'Free') + '</strong></div>'
         : '';
       $id('wfm-summary-content').innerHTML =
           '<div class="wfm-summary-row wfm-summary-row--plan"><span>' + esc(plan.name) + '</span><span class="wfm-summary-period">' + esc(plan.plan_duration) + '</span></div>'
@@ -1094,7 +1102,7 @@
   function paymentLabel() {
     var plan = state.selectedPlan;
     return state.trialMode
-      ? 'Start ' + plan.trial_period_days + '-Day Limited Trial'
+      ? 'Start ' + plan.trial_period_days + '-Day Trial'
       : 'Pay ' + money(totals().dueTodayCents);
   }
 
@@ -1117,11 +1125,11 @@
       var trialDays  = plan.trial_period_days;
       var renewalStr = renewalDate(trialDays);
       var planAmount = money(totals().renewalCents);
-      title.textContent = 'Start Your ' + trialDays + '-Day Limited Trial';
+      title.textContent = 'Start Your ' + trialDays + '-Day Trial';
       $id('wfm-payment-heading').textContent = 'Card details';
       billingNotice.innerHTML = 'You will be charged ' + planAmount + esc(plan.periodSuffix) + ' plus applicable taxes on ' + renewalStr + ' unless you cancel before then. You may cancel through <em>Account Settings &gt; Plan Details &gt; Manage Membership.</em>';
       billingNotice.style.display = '';
-      $id('wfm-trial-tnc-label').textContent = 'I understand that my ' + trialDays + '-Day Limited Trial will automatically renew unless canceled before ' + renewalStr + '.';
+      $id('wfm-trial-tnc-label').textContent = 'I understand that my ' + trialDays + '-Day Trial will automatically renew unless canceled before ' + renewalStr + '.';
       trialTncRow.style.display = '';
       trialHelp.style.display = '';
     } else {
@@ -1179,7 +1187,7 @@
         name:                  buyer.firstName + ' ' + buyer.lastName,
         country:               COUNTRY,
         priceID:               plan.priceId,
-        additionalSeatPriceID: state.additionalAccounts > 0 ? plan.seatPriceId : null,
+        // Seats are priced from priceID on the server; no seat price id is sent.
         additionalSeats:       state.additionalAccounts || 0,
         trialDays:             state.trialMode ? plan.trial_period_days : 0,
         providerCode:          'stripe',

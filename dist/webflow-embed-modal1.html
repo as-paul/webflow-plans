@@ -1,0 +1,49 @@
+<div id="wfm-modal1" class="wfm-overlay" role="dialog" aria-modal="true" aria-label="Choose your plan">
+  <div class="wfm-scroll-body">
+    <div class="wfm-container">
+      <div class="wfm-hdr" id="wfm-modal1-hdr">
+        <button class="wfm-back" id="wfm-acct-hdr-back" onclick="wfmHideAccountsPicker()" style="display:none">← Back to plan</button>
+        <h2 class="wfm-title">Choose Your Plan</h2>
+        <button class="wfm-close" onclick="wfmClose()" aria-label="Close">✕</button>
+      </div>
+      <div id="wfm-tabs" class="wfm-tabs"></div>
+      <div id="wfm-plan-list" class="wfm-plans">
+        <div class="wfm-loading"><div class="wfm-spinner"></div>Loading plans…</div>
+      </div>
+      <div class="wfm-promo-row">
+        <input id="wfm-promo-input" class="wfm-promo-input" type="text" placeholder="Promo code (optional)" autocomplete="off">
+        <button class="wfm-promo-apply" onclick="wfmApplyPromo()">Apply</button>
+      </div>
+      <div id="wfm-promo-msg" class="wfm-promo-msg"></div>
+
+      <!-- Additional accounts picker (shown only for eligible plans) -->
+      <div id="wfm-acct-picker" class="wfm-acct-picker" style="display:none">
+        <div class="wfm-acct-body">
+          <h3 class="wfm-acct-title">Additional Accounts</h3>
+          <p class="wfm-acct-sub" id="wfm-acct-sub"></p>
+          <div class="wfm-acct-controls">
+            <button class="wfm-acct-btn" onclick="wfmChangeAccounts(-1)" aria-label="Fewer accounts">−</button>
+            <span class="wfm-acct-count" id="wfm-acct-count">0</span>
+            <button class="wfm-acct-btn" onclick="wfmChangeAccounts(1)" aria-label="More accounts">+</button>
+          </div>
+          <div class="wfm-acct-total" id="wfm-acct-total"></div>
+          <ul class="wfm-acct-notes">
+            <li>Setup family members in the app after purchase</li>
+            <li>Discounts applied at checkout</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- footer bar: flex sibling so it never overlaps scrollable content -->
+  <div id="wfm-footer-bar" class="wfm-footer-bar">
+    <div class="wfm-bar-info">
+      <div class="wfm-bar-name" id="wfm-bar-name">—</div>
+      <div class="wfm-bar-price" id="wfm-bar-price"></div>
+    </div>
+    <button class="wfm-continue-btn" onclick="wfmOpenStep2()">
+      Continue
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </button>
+  </div>
+</div>

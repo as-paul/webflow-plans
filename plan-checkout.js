@@ -16,7 +16,7 @@
   // preview period, your paid membership will begin immediately."). Hidden
   // since the 2.0 cutover: trial members can use the live service without
   // being converted. Flip to true to show it again.
-  var SHOW_TRIAL_CONVERSION_NOTICE = false;
+  var SHOW_TRIAL_CONVERSION_NOTICE = true;
 
   // Billing tabs, in display order. A tab only shows when some plan has
   // an active USD price for it.
@@ -752,7 +752,7 @@
           '<div class="wfm-plan-header">'
         +   '<div class="wfm-plan-header-info">'
         +     '<div class="wfm-plan-header-name">' + esc(plan.name) + '</div>'
-        +     '<div class="wfm-preview-badge">Trial</div>'
+        +     '<div class="wfm-preview-badge">Limited Trial</div>'
         +   '</div>'
         + '</div>'
         + '<div class="wfm-summary-divider"></div>'
@@ -1102,7 +1102,7 @@
   function paymentLabel() {
     var plan = state.selectedPlan;
     return state.trialMode
-      ? 'Start ' + plan.trial_period_days + '-Day Trial'
+      ? 'Start ' + plan.trial_period_days + '-Day Limited Trial'
       : 'Pay ' + money(totals().dueTodayCents);
   }
 
@@ -1125,11 +1125,11 @@
       var trialDays  = plan.trial_period_days;
       var renewalStr = renewalDate(trialDays);
       var planAmount = money(totals().renewalCents);
-      title.textContent = 'Start Your ' + trialDays + '-Day Trial';
+      title.textContent = 'Start Your ' + trialDays + '-Day Limited Trial';
       $id('wfm-payment-heading').textContent = 'Card details';
       billingNotice.innerHTML = 'You will be charged ' + planAmount + esc(plan.periodSuffix) + ' plus applicable taxes on ' + renewalStr + ' unless you cancel before then. You may cancel through <em>Account Settings &gt; Plan Details &gt; Manage Membership.</em>';
       billingNotice.style.display = '';
-      $id('wfm-trial-tnc-label').textContent = 'I understand that my ' + trialDays + '-Day Trial will automatically renew unless canceled before ' + renewalStr + '.';
+      $id('wfm-trial-tnc-label').textContent = 'I understand that my ' + trialDays + '-Day Limited Trial will automatically renew unless canceled before ' + renewalStr + '.';
       trialTncRow.style.display = '';
       trialHelp.style.display = '';
     } else {
